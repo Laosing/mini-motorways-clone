@@ -1,0 +1,9 @@
+# AI Instructions
+
+## Verification Tooling
+- **DO NOT use the browser tool** to verify changes or check game state.
+- The user has the game open and will perform all visual/interactive verification manually.
+
+## Guardrails
+- Always read `AGENTS.md` and `GAMEPLAY_GUARDRAILS.md` before making changes.
+- Preserve core gameplay invariants as defined in those documents.
