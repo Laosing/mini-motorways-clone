@@ -106,6 +106,58 @@ export function applyCrowdAvoidance(
   clampBodySpeed(body, cfg.maxSpeed);
 }
 
+export function applyTrafficFlow(
+  body: MovingBody,
+  others: MovingBody[],
+  laneDir: LJS.Vector2,
+  cfg: AvoidanceConfig
+): void {
+  let brakeFactor = 0;
+  let slowdownFactor = 1;
+  const selfPos = LJS.vec2(body.x, body.y);
+  const selfVel = LJS.vec2(body.dx, body.dy);
+
+  const laneHeading =
+    laneDir.length() > 0.001 ? laneDir.normalize() : LJS.vec2();
+
+  for (const other of others) {
+    if (other.id === body.id) continue;
+    const otherPos = LJS.vec2(other.x, other.y);
+    const delta = otherPos.subtract(selfPos);
+    const dist = delta.length();
+    if (dist > cfg.slowDistance) continue;
+
+    const project = delta.dot(laneHeading);
+    const lateralDir = delta.subtract(laneHeading.scale(project));
+    const lateralDist = lateralDir.length();
+
+    // Narrow corridor for lane-following
+    const isInLane = lateralDist < cfg.collisionDistance * 0.75;
+
+    if (project > 0 && project < cfg.slowDistance && isInLane) {
+      // Direct lead 'car' detection
+      const gap = project;
+      if (gap < cfg.collisionDistance) {
+        brakeFactor = 1; // Emergency stop
+      } else {
+        const t =
+          (cfg.slowDistance - gap) / (cfg.slowDistance - cfg.collisionDistance);
+        brakeFactor = Math.max(brakeFactor, Math.min(1, t * 0.8));
+      }
+    }
+
+    // General proximity slowdown (merging/intersections)
+    if (dist < cfg.avoidDistance) {
+      const mergeFactor = (cfg.avoidDistance - dist) / cfg.avoidDistance;
+      slowdownFactor = Math.min(slowdownFactor, 1 - mergeFactor * 0.3);
+    }
+  }
+
+  const finalSpeedMult = slowdownFactor * (1 - brakeFactor);
+  body.dx *= finalSpeedMult;
+  body.dy *= finalSpeedMult;
+}
+
 export function advanceBody(
   body: MovingBody,
   dt: number,

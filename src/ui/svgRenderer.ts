@@ -95,6 +95,12 @@ interface FarmRender {
   animals: AnimalRender[];
 }
 
+interface PathRender {
+  path: SVGPathElement;
+  border: SVGPathElement;
+  shadow: SVGPathElement;
+}
+
 interface PersonRender {
   group: SVGGElement;
   body: SVGCircleElement;
@@ -104,7 +110,7 @@ let scene: Scene | null = null;
 const yurtMap = new Map<string, YurtRender>();
 const farmMap = new Map<string, FarmRender>();
 const personMap = new Map<string, PersonRender>();
-const pathMap = new Map<string, SVGPathElement>();
+const pathMap = new Map<string, PathRender>();
 
 function createSvgElement<T extends keyof SVGElementTagNameMap>(
   tag: T
@@ -321,7 +327,18 @@ function buildJoinedPathDs(pathList: PathLike[]): string[] {
   return ds;
 }
 
-function addPathWithTransition(s: Scene, d: string): SVGPathElement {
+function addPathWithTransition(s: Scene, d: string): PathRender {
+  const border = createSvgElement('path');
+  border.setAttribute('d', d);
+  border.setAttribute('fill', 'none');
+  border.setAttribute('stroke', colors.ui);
+  border.setAttribute('stroke-linecap', 'round');
+  border.setAttribute('stroke-linejoin', 'round');
+  border.style.transition = 'all .4s, opacity .2s';
+  border.setAttribute('stroke-width', '0');
+  border.setAttribute('opacity', '0');
+  s.pathShadowLayer.append(border);
+
   const path = createSvgElement('path');
   path.setAttribute('d', d);
   path.setAttribute('fill', 'none');
@@ -344,15 +361,13 @@ function addPathWithTransition(s: Scene, d: string): SVGPathElement {
   s.pathShadowLayer.append(shadow);
 
   setTimeout(() => {
-    path.setAttribute('stroke-width', '3');
+    border.setAttribute('stroke-width', '8');
+    border.setAttribute('opacity', '1');
+    path.setAttribute('stroke-width', '6.5');
     path.setAttribute('opacity', '1');
   }, 20);
 
-  setTimeout(() => {
-    shadow.remove();
-  }, 500);
-
-  return path;
+  return { path, border, shadow };
 }
 
 function syncPaths(s: Scene, game: Game): void {
@@ -364,9 +379,11 @@ function syncPaths(s: Scene, game: Game): void {
   const next = new Set(ds);
 
   ds.forEach((d) => {
-    const existing = pathMap.get(d);
-    if (existing) {
-      existing.setAttribute('d', d);
+    const render = pathMap.get(d);
+    if (render) {
+      render.path.setAttribute('d', d);
+      render.border.setAttribute('d', d);
+      render.shadow.setAttribute('d', d);
       return;
     }
 
@@ -374,13 +391,19 @@ function syncPaths(s: Scene, game: Game): void {
     pathMap.set(d, created);
   });
 
-  for (const [d, element] of pathMap.entries()) {
+  for (const [d, render] of pathMap.entries()) {
     if (next.has(d)) continue;
 
-    element.setAttribute('opacity', '0');
-    element.setAttribute('stroke-width', '0');
+    render.path.setAttribute('opacity', '0');
+    render.path.setAttribute('stroke-width', '0');
+    render.border.setAttribute('opacity', '0');
+    render.border.setAttribute('stroke-width', '0');
+    render.shadow.setAttribute('opacity', '0');
+
     setTimeout(() => {
-      element.remove();
+      render.path.remove();
+      render.border.remove();
+      render.shadow.remove();
     }, 500);
     pathMap.delete(d);
   }

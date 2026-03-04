@@ -1,5 +1,5 @@
 import * as LJS from 'littlejsengine';
-import { GAME_CONFIG } from './config';
+import { GAME_CONFIG, SAVE_KEY } from './config';
 import { SeededRng } from './rng';
 import { StateMachine } from './stateMachine';
 import { EventBus } from './events';
@@ -43,6 +43,7 @@ export interface Snapshot {
   seed: number;
   servedTrips: number;
   updateCount: number;
+  autoSpawningEnabled?: boolean;
 }
 
 export class Game {
@@ -66,6 +67,7 @@ export class Game {
   private updateRandomness3 = 0;
   private updateRandomness4 = 0;
   private yurtFailed = false;
+  autoSpawningEnabled = true;
 
   constructor(seed = Date.now() >>> 0) {
     this.rng = new SeededRng(seed);
@@ -108,7 +110,21 @@ export class Game {
     else if (this.state.is('Pause')) this.state.transition('Play');
   }
 
+  reset(): void {
+    if (confirm('Reset the game and delete save?')) {
+      localStorage.removeItem(SAVE_KEY);
+      window.location.reload();
+    }
+  }
+
+  toggleAutoSpawning(): void {
+    this.autoSpawningEnabled = !this.autoSpawningEnabled;
+  }
+
   update(dt: number): void {
+    if (LJS.keyWasPressed('Space')) this.togglePause();
+    if (LJS.keyWasPressed('KeyS')) this.save();
+    if (LJS.keyWasPressed('KeyR')) this.reset();
     if (this.state.is('Menu')) {
       if (LJS.mouseWasPressed(0)) this.startPlay();
       return;
@@ -164,7 +180,8 @@ export class Game {
       paths: this.paths.map((p) => ({ a: { ...p.a }, b: { ...p.b } })),
       seed: this.rng.getSeed(),
       servedTrips: this.servedTrips,
-      updateCount: this.updateCount
+      updateCount: this.updateCount,
+      autoSpawningEnabled: this.autoSpawningEnabled
     };
   }
 
@@ -207,7 +224,8 @@ export class Game {
       dx: v.dx ?? 0,
       dy: v.dy ?? 0,
       rotation: v.rotation ?? 0,
-      originalRouteLength: v.originalRouteLength ?? v.path.length
+      originalRouteLength: v.originalRouteLength ?? v.path.length,
+      lastReachedPos: v.lastReachedPos ?? null
     }));
     this.paths = (snapshot.paths ?? []).map((p) => ({
       a: { ...p.a },
@@ -215,6 +233,7 @@ export class Game {
     }));
     this.servedTrips = snapshot.servedTrips ?? 0;
     this.updateCount = snapshot.updateCount ?? 0;
+    this.autoSpawningEnabled = snapshot.autoSpawningEnabled ?? true;
     this.backfillStructureSizes();
     this.backfillFarmDemandState();
     this.rebuildOccupancyFromStructures();
@@ -259,6 +278,7 @@ export class Game {
   }
 
   private spawnBySchedule(): void {
+    if (!this.autoSpawningEnabled) return;
     let upgradedThisLoop = false;
 
     if (this.updateCount % SPAWNING_LOOP_LENGTH === 0) {
@@ -510,7 +530,8 @@ export class Game {
         dx: 0,
         dy: 0,
         rotation: 0,
-        originalRouteLength: 0
+        originalRouteLength: 0,
+        lastReachedPos: null
       });
     }
   }
@@ -538,7 +559,8 @@ export class Game {
           dx: 0,
           dy: 0,
           rotation: 0,
-          originalRouteLength: 0
+          originalRouteLength: 0,
+          lastReachedPos: null
         });
       }
     }

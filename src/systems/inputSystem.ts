@@ -128,6 +128,7 @@ export function handleInput(game: Game): void {
 
   if (LJS.keyWasPressed('Space')) game.togglePause();
   if (LJS.keyWasPressed('KeyS')) game.save();
+  if (LJS.keyWasPressed('KeyR')) game.reset();
 
   if (LJS.mouseWasPressed(0) && game.cursorTile) {
     game.dragStartTile = game.cursorTile;

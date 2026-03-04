@@ -17,4 +17,5 @@ export interface Villager extends Entity {
   dy: number;
   rotation: number;
   originalRouteLength: number;
+  lastReachedPos: { x: number; y: number } | null;
 }

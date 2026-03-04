@@ -20,6 +20,7 @@ const MIN_CRUISE_SPEED = 0.04 * PX_TO_CELL;
 const ARRIVAL_RADIUS = 2.5 * PX_TO_CELL;
 const LOOKAHEAD_DISTANCE = 2.0 * PX_TO_CELL;
 const STEER_ACCEL = 0.02 * PX_TO_CELL;
+const LANE_OFFSET = 1.35 * PX_TO_CELL; // Offset to keep villagers in lanes
 const MOVE_DAMPING = 0.98;
 const IDLE_DAMPING = 0.9;
 // Keep villager collider in sync with SVG render radius (r=1.35 in svgRenderer).
@@ -69,6 +70,19 @@ function getLookaheadTarget(
   return LJS.vec2(last.x, last.y);
 }
 
+function getLaneOffsetVector(
+  from: LJS.Vector2,
+  to: LJS.Vector2,
+  offset: number
+): LJS.Vector2 {
+  const diff = to.subtract(from);
+  const len = diff.length();
+  if (len < 0.001) return LJS.vec2(0, 0);
+  const dir = diff.scale(1 / len);
+  // Perpendicular vector for Right Hand Traffic (RHT)
+  return LJS.vec2(dir.y, -dir.x).scale(offset);
+}
+
 function steerAlongRoute(_game: Game, villager: Villager): void {
   if (!villager.path.length) return;
 
@@ -90,18 +104,32 @@ function steerAlongRoute(_game: Game, villager: Villager): void {
   const dist = pos.distance(target);
 
   if (dist < closeEnough) {
-    villager.path.shift();
+    const reached = villager.path.shift();
+    if (reached) {
+      villager.lastReachedPos = { x: reached.x, y: reached.y };
+    }
     if (!villager.path.length) {
       villager.x = target.x;
       villager.y = target.y;
       villager.dx = 0;
       villager.dy = 0;
+      villager.lastReachedPos = null;
     }
     return;
   }
 
+  if (!villager.lastReachedPos) {
+    villager.lastReachedPos = { x: villager.x, y: villager.y };
+  }
+
+  const prev = LJS.vec2(villager.lastReachedPos.x, villager.lastReachedPos.y);
+  const laneOffset = getLaneOffsetVector(prev, target, LANE_OFFSET);
+
+  // Instead of just shifting the target, we want to steer toward a point on the "lane line"
   const lookaheadTarget = getLookaheadTarget(pos, villager.path);
-  const steerTarget = villager.path.length === 1 ? target : lookaheadTarget;
+  let steerTarget = (villager.path.length === 1 ? target : lookaheadTarget).add(
+    laneOffset
+  );
 
   const rampCfg: SteeringConfig = {
     ...STEER_CFG,
@@ -152,6 +180,7 @@ function assignPeopleToFarmIssues(game: Game): void {
       chosen.task = 'toFarm';
       chosen.target = chosenRoute.at(-1) ?? { x: farm.x, y: farm.y };
       chosen.path = chosenRoute;
+      chosen.lastReachedPos = { x: chosen.x, y: chosen.y };
       chosen.originalRouteLength = chosenRoute.length;
       chosen.assignedFarmId = farm.id;
       farm.assignedVillagerIds.push(chosen.id);
@@ -249,9 +278,11 @@ export function updateVillagers(game: Game, dt: number): void {
           game.consumeFarmIssue(farm);
           game.servedTrips += 1;
           villager.task = 'atFarm';
+          villager.lastReachedPos = null;
           villager.waitTimer = 1.2;
         } else {
           villager.task = 'idle';
+          villager.lastReachedPos = null;
           unassignFromFarm(game, villager.id, villager.assignedFarmId);
           villager.assignedFarmId = null;
         }
@@ -261,6 +292,7 @@ export function updateVillagers(game: Game, dt: number): void {
         villager.dx = 0;
         villager.dy = 0;
         villager.task = 'idle';
+        villager.lastReachedPos = null;
         unassignFromFarm(game, villager.id, villager.assignedFarmId);
         villager.assignedFarmId = null;
       }
@@ -292,6 +324,7 @@ export function updateVillagers(game: Game, dt: number): void {
           villager.task = 'toHome';
           villager.target = { x: home.x, y: home.y };
           villager.path = backRoute;
+          villager.lastReachedPos = { x: villager.x, y: villager.y };
           villager.originalRouteLength = backRoute.length;
         } else {
           villager.task = 'idle';
