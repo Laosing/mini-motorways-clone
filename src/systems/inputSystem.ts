@@ -1,56 +1,9 @@
 import * as LJS from 'littlejsengine';
 import type { Game } from '@core/Game';
 import { areAdjacent, edgeKey } from './pathNetwork';
-
-let pointerClientX = -1;
-let pointerClientY = -1;
-let pointerTracked = false;
-
-if (typeof window !== 'undefined') {
-  const updatePointer = (event: PointerEvent | MouseEvent): void => {
-    pointerClientX = event.clientX;
-    pointerClientY = event.clientY;
-    pointerTracked = true;
-  };
-  window.addEventListener('pointermove', updatePointer, { passive: true });
-  window.addEventListener('pointerdown', updatePointer, { passive: true });
-}
-
-function getClientPointer(): { x: number; y: number } | null {
-  if (pointerTracked) return { x: pointerClientX, y: pointerClientY };
-  const sx = LJS.mousePosScreen.x;
-  const sy = LJS.mousePosScreen.y;
-  if (sx <= 0 || sy <= 0) return null;
-  return { x: sx, y: sy };
-}
+import { GAME_CONFIG } from '@core/config';
 
 function mouseToTile(game: Game): { x: number; y: number } | null {
-  const pointer = getClientPointer();
-  if (!pointer) return null;
-
-  const board = document.querySelector(
-    '#svg-board svg'
-  ) as SVGSVGElement | null;
-  if (board) {
-    const rect = board.getBoundingClientRect();
-    const sx = pointer.x;
-    const sy = pointer.y;
-
-    if (
-      sx >= rect.left &&
-      sx <= rect.right &&
-      sy >= rect.top &&
-      sy <= rect.bottom
-    ) {
-      const nx = (sx - rect.left) / rect.width;
-      const ny = (sy - rect.top) / rect.height;
-      return {
-        x: Math.floor(nx * game.grid.width),
-        y: Math.floor(ny * game.grid.height)
-      };
-    }
-  }
-
   const wx = Math.floor(LJS.mousePos.x + 0.5);
   const wy = Math.floor(LJS.mousePos.y + 0.5);
   if (!game.grid.isInside(wx, wy)) return null;
@@ -99,23 +52,10 @@ function stepToward(
 
 export function handleInput(game: Game): void {
   const panSpeed = 0.5;
-  const edgePanSpeed = 0.35;
-  const edgeThreshold = 36;
   if (LJS.keyIsDown('ArrowLeft')) game.camera.x -= panSpeed;
   if (LJS.keyIsDown('ArrowRight')) game.camera.x += panSpeed;
   if (LJS.keyIsDown('ArrowUp')) game.camera.y += panSpeed;
   if (LJS.keyIsDown('ArrowDown')) game.camera.y -= panSpeed;
-
-  // Edge-scroll camera movement (Tiny-Yurts-like RTS panning)
-  const pointer = getClientPointer();
-  if (pointer) {
-    const sx = pointer.x;
-    const sy = pointer.y;
-    if (sx < edgeThreshold) game.camera.x -= edgePanSpeed;
-    if (sx > window.innerWidth - edgeThreshold) game.camera.x += edgePanSpeed;
-    if (sy < edgeThreshold) game.camera.y += edgePanSpeed;
-    if (sy > window.innerHeight - edgeThreshold) game.camera.y -= edgePanSpeed;
-  }
 
   if (LJS.mouseWheel) {
     game.camera.scale = Math.max(

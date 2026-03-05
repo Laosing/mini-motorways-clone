@@ -6,20 +6,52 @@ export function setupHUD(game: Game): void {
   const root = document.getElementById('ui');
   if (!root) return;
 
+  root.innerHTML = ''; // Clear existing
+
   hudEl = document.createElement('div');
-  hudEl.style.cssText =
-    'position:absolute;left:10px;top:10px;background:rgba(30,30,30,.72);color:#fff;padding:8px 10px;border-radius:6px;font-size:14px;pointer-events:none;';
+  hudEl.className = 'hud-panel';
   root.appendChild(hudEl);
 
-  const btn = document.createElement('button');
-  btn.id = 'toggle-spawn';
-  btn.style.cssText =
-    'position:absolute;left:10px;top:180px;background:#443;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-family:inherit;font-size:14px;';
-  btn.onclick = () => {
+  const buttonGroup = document.createElement('div');
+  buttonGroup.className = 'button-group';
+  root.appendChild(buttonGroup);
+
+  const createBtn = (
+    id: string,
+    text: string,
+    className: string,
+    onClick: () => void
+  ) => {
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.className = `game-btn ${className}`;
+    btn.textContent = text;
+    btn.onclick = onClick;
+    buttonGroup.appendChild(btn);
+    return btn;
+  };
+
+  createBtn('btn-pause', 'Pause', '', () => {
+    game.togglePause();
+    updateHUD(game);
+  });
+
+  createBtn('btn-spawn', 'Freeze Growth', 'warning', () => {
     game.toggleAutoSpawning();
     updateHUD(game);
-  };
-  root.appendChild(btn);
+  });
+
+  createBtn('btn-save', 'Save Game', 'primary', () => {
+    game.save();
+    updateHUD(game);
+  });
+
+  createBtn('btn-reset', 'Reset', 'danger', () => {
+    if (confirm('Are you sure you want to reset the entire world?')) {
+      game.reset();
+      updateHUD(game);
+    }
+  });
 
   updateHUD(game);
 }
@@ -38,21 +70,28 @@ export function updateHUD(game: Game): void {
     .filter((f) => f.destination === 'fish')
     .reduce((acc, f) => acc + (f.demand ?? 0), 0);
 
-  hudEl.innerHTML = [
-    `State: ${game.state.state}`,
-    `Day: ${game.day}`,
-    `Trips Served: ${game.servedTrips}`,
-    `Yurts: ${game.yurts.length}`,
-    `People: ${game.villagers.length}`,
-    `Demand - Ox:${oxDemand} Goat:${goatDemand} Fish:${fishDemand}`,
-    'Controls: LMB drag path, RMB erase, S save, R reset, Space pause'
-  ].join('<br>');
+  hudEl.innerHTML = `
+    <strong>Kingdom Stats</strong><br>
+    State: ${game.state.state}<br>
+    Day: ${game.day}<br>
+    Trips Served: ${game.servedTrips}<br>
+    Houses: ${game.houses.length} | People: ${game.villagers.length}<br>
+    Oxen: ${game.oxenCount} | Sheep: ${game.sheepCount} | Fish: ${game.fishCount}<br>
+    Demand - Ox:${oxDemand} Sheep:${goatDemand} Fish:${fishDemand}
+  `;
 
-  const btn = document.getElementById('toggle-spawn') as HTMLButtonElement;
-  if (btn) {
-    btn.textContent = game.autoSpawningEnabled
+  const pauseBtn = document.getElementById('btn-pause');
+  if (pauseBtn) {
+    const isPaused = game.state.is('Pause');
+    pauseBtn.textContent = isPaused ? 'Resume Game' : 'Pause';
+    pauseBtn.className = `game-btn ${isPaused ? 'primary' : ''}`;
+  }
+
+  const spawnBtn = document.getElementById('btn-spawn');
+  if (spawnBtn) {
+    spawnBtn.textContent = game.autoSpawningEnabled
       ? 'Freeze Growth'
       : 'Resume Growth';
-    btn.style.background = game.autoSpawningEnabled ? '#443' : '#a54';
+    spawnBtn.className = `game-btn ${game.autoSpawningEnabled ? 'warning' : 'primary'}`;
   }
 }

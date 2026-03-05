@@ -19,19 +19,29 @@ describe('service loop', () => {
     updateVillagers(game, 0.1);
     expect(villager.task).toBe('idle');
 
-    const home = game.yurts.find((y) => y.id === villager.homeYurtId)!;
-    const farm = game.farms.find((f) => f.destination === villager.destinationType)!;
+    const home = game.houses.find((y) => y.id === villager.homeHouseId)!;
+    const farm = game.farms.find(
+      (f) => f.destination === villager.destinationType
+    )!;
     farm.animals = farm.animals ?? [];
     if (!farm.animals.length) {
-      farm.animals.push({ id: 'test-animal-1', demandTimer: 10, hasDemand: true });
+      farm.animals.push({
+        id: 'test-animal-1',
+        demandTimer: 10,
+        hasDemand: true
+      });
       farm.numAnimals = 1;
     } else {
-      farm.animals = farm.animals.map((a, i) => ({ ...a, demandTimer: 10, hasDemand: i === 0 }));
+      farm.animals = farm.animals.map((a, i) => ({
+        ...a,
+        demandTimer: 10,
+        hasDemand: i === 0
+      }));
     }
     farm.numIssues = 1;
     farm.demand = farm.needyness;
 
-    // Create a minimal Manhattan path between yurt and matching farm.
+    // Create a minimal Manhattan path between house and matching farm.
     let x = home.x;
     let y = home.y;
     while (x !== farm.x) {

@@ -25,27 +25,54 @@ export interface AvoidanceConfig {
   maxSpeed: number;
 }
 
+// Cached vectors for zero-allocation physics
+const _v1 = LJS.vec2();
+const _v2 = LJS.vec2();
+const _v3 = LJS.vec2();
+const _v4 = LJS.vec2();
+const _v5 = LJS.vec2();
+const _v6 = LJS.vec2();
+const _v7 = LJS.vec2();
+
 export function steerToward(
   body: MovingBody,
   target: LJS.Vector2,
   cfg: SteeringConfig
 ): void {
-  const pos = LJS.vec2(body.x, body.y);
-  const toTarget = target.subtract(pos);
-  const dist = toTarget.length();
-  const heading = dist > 0.0001 ? toTarget.normalize() : LJS.vec2();
+  // Use _v1 for pos, _v2 for toTarget
+  _v1.set(body.x, body.y);
+  _v2.set(target.x - _v1.x, target.y - _v1.y);
+  const dist = _v2.length();
+
+  if (dist > 0.0001) {
+    const invDist = 1 / dist;
+    _v2.x *= invDist;
+    _v2.y *= invDist;
+  } else {
+    _v2.set(0, 0);
+  }
+
   const speedRamp = Math.min(1, dist / cfg.arrivalRadius);
   const targetSpeed = Math.max(cfg.minCruiseSpeed, cfg.maxSpeed * speedRamp);
-  const desiredVelocity = heading.scale(targetSpeed);
-  const currentVelocity = LJS.vec2(body.dx, body.dy);
-  const steer = desiredVelocity.subtract(currentVelocity);
-  const steerLen = steer.length();
-  const steerStep =
-    steerLen > cfg.steerAccel ? steer.normalize().scale(cfg.steerAccel) : steer;
-  const nextVelocity = currentVelocity.add(steerStep).scale(cfg.damping);
 
-  body.dx = nextVelocity.x;
-  body.dy = nextVelocity.y;
+  // _v2 is now heading, reuse it for desiredVelocity
+  _v2.x *= targetSpeed;
+  _v2.y *= targetSpeed;
+
+  // _v3 for currentVelocity, _v4 for steer
+  _v3.set(body.dx, body.dy);
+  _v4.set(_v2.x - _v3.x, _v2.y - _v3.y);
+
+  const steerLen = _v4.length();
+  if (steerLen > cfg.steerAccel) {
+    const invSteerLen = cfg.steerAccel / steerLen;
+    _v4.x *= invSteerLen;
+    _v4.y *= invSteerLen;
+  }
+
+  // Update body directly
+  body.dx = (_v3.x + _v4.x) * cfg.damping;
+  body.dy = (_v3.y + _v4.y) * cfg.damping;
 
   clampBodySpeed(body, cfg.maxSpeed);
 }
@@ -55,42 +82,58 @@ export function applyCrowdAvoidance(
   others: MovingBody[],
   cfg: AvoidanceConfig
 ): void {
-  let separation = LJS.vec2();
+  // _v1: separation, _v2: selfPos, _v3: selfVel, _v4: heading
+  _v1.set(0, 0);
   let slowdownFactor = 1;
   let brakeFactor = 0;
-  const selfPos = LJS.vec2(body.x, body.y);
-  const selfVel = LJS.vec2(body.dx, body.dy);
-  const velLen = selfVel.length();
-  const heading = velLen > 0.001 ? selfVel.normalize() : LJS.vec2();
 
-  for (const other of others) {
+  _v2.set(body.x, body.y);
+  _v3.set(body.dx, body.dy);
+  const velLen = _v3.length();
+
+  if (velLen > 0.001) {
+    const invVelLen = 1 / velLen;
+    _v4.set(_v3.x * invVelLen, _v3.y * invVelLen);
+  } else {
+    _v4.set(0, 0);
+  }
+
+  for (let i = 0; i < others.length; i++) {
+    const other = others[i];
     if (other.id === body.id) continue;
-    const otherPos = LJS.vec2(other.x, other.y);
-    const delta = selfPos.subtract(otherPos);
-    const dist = delta.length();
-    if (dist < 0.0001) continue;
+
+    // _v5: delta
+    _v5.set(_v2.x - other.x, _v2.y - other.y);
+    const distSq = _v5.x * _v5.x + _v5.y * _v5.y;
+    if (distSq < 0.00001 || distSq > cfg.slowDistance * cfg.slowDistance)
+      continue;
+
+    const dist = Math.sqrt(distSq);
+    const invDist = 1 / dist;
 
     // Repulsion at very close range
     if (dist < cfg.collisionDistance) {
-      const push = delta
-        .normalize()
-        .scale((cfg.collisionDistance - dist) * 0.7);
-      separation = separation.add(push);
+      const push = (cfg.collisionDistance - dist) * 0.3 * invDist;
+      _v1.x += _v5.x * push;
+      _v1.y += _v5.y * push;
     } else if (dist < cfg.avoidDistance) {
-      // Gentle lateral nudge
-      const n = delta.normalize();
-      const lateral = LJS.vec2(-n.y, n.x).scale(cfg.turniness);
-      separation = separation.add(lateral);
+      // Gentle lateral nudge - reuse _v5 for normal, then lateral
+      const nx = _v5.x * invDist;
+      const ny = _v5.y * invDist;
+      _v1.x += -ny * cfg.turniness;
+      _v1.y += nx * cfg.turniness;
     }
 
     // Proactive braking if someone is in front of us
     if (dist < cfg.slowDistance && velLen > 0) {
-      const toOther = otherPos.subtract(selfPos).normalize();
-      const dot = heading.dot(toOther);
+      // _v6: toOtherDir (normalized)
+      const tox = (other.x - _v2.x) * invDist;
+      const toy = (other.y - _v2.y) * invDist;
+      const dot = _v4.x * tox + _v4.y * toy;
+
       if (dot > 0.8) {
-        // They are directly in front of us
         const t = (cfg.slowDistance - dist) / cfg.slowDistance;
-        brakeFactor = Math.max(brakeFactor, t * 0.5); // Less aggressive braking
+        brakeFactor = Math.max(brakeFactor, t * 0.3); // Softer braking
       }
 
       const t = (cfg.slowDistance - dist) / cfg.slowDistance;
@@ -98,10 +141,9 @@ export function applyCrowdAvoidance(
     }
   }
 
-  const adjusted = selfVel.add(separation);
   const finalSlowdown = slowdownFactor * (1 - brakeFactor);
-  body.dx = adjusted.x * finalSlowdown;
-  body.dy = adjusted.y * finalSlowdown;
+  body.dx = (_v3.x + _v1.x) * finalSlowdown;
+  body.dy = (_v3.y + _v1.y) * finalSlowdown;
 
   clampBodySpeed(body, cfg.maxSpeed);
 }
@@ -114,22 +156,25 @@ export function applyTrafficFlow(
 ): void {
   let brakeFactor = 0;
   let slowdownFactor = 1;
-  const selfPos = LJS.vec2(body.x, body.y);
-  const selfVel = LJS.vec2(body.dx, body.dy);
-
-  const laneHeading =
-    laneDir.length() > 0.001 ? laneDir.normalize() : LJS.vec2();
+  _v1.set(body.x, body.y); // selfPos
+  _v2.set(laneDir.x, laneDir.y); // laneHeading
+  const laneLen = _v2.length();
+  if (laneLen > 0.001) {
+    _v2.x /= laneLen;
+    _v2.y /= laneLen;
+  }
 
   for (const other of others) {
     if (other.id === body.id) continue;
-    const otherPos = LJS.vec2(other.x, other.y);
-    const delta = otherPos.subtract(selfPos);
-    const dist = delta.length();
+    _v3.set(other.x - _v1.x, other.y - _v1.y); // delta
+    const dist = _v3.length();
     if (dist > cfg.slowDistance) continue;
 
-    const project = delta.dot(laneHeading);
-    const lateralDir = delta.subtract(laneHeading.scale(project));
-    const lateralDist = lateralDir.length();
+    const project = _v3.x * _v2.x + _v3.y * _v2.y; // delta.dot(laneHeading)
+    // lateralDelta = delta - laneHeading * project
+    const latX = _v3.x - _v2.x * project;
+    const latY = _v3.y - _v2.y * project;
+    const lateralDist = Math.sqrt(latX * latX + latY * latY);
 
     // Narrow corridor for lane-following
     const isInLane = lateralDist < cfg.collisionDistance * 0.75;
@@ -158,6 +203,38 @@ export function applyTrafficFlow(
   body.dy *= finalSpeedMult;
 }
 
+export function resolveBodyOverlapsSingle(
+  body: MovingBody,
+  others: MovingBody[],
+  minDistance: number
+): void {
+  for (let i = 0; i < others.length; i++) {
+    const other = others[i];
+    if (other.id === body.id) continue;
+
+    const dx = body.x - other.x;
+    const dy = body.y - other.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq >= minDistance * minDistance) continue;
+
+    const dist = Math.sqrt(distSq);
+    let nx, ny;
+    if (dist < 0.0001) {
+      nx = 1;
+      ny = 0;
+    } else {
+      nx = dx / dist;
+      ny = dy / dist;
+    }
+
+    const pushAmount = (minDistance - dist) * 0.1; // Softer push
+    body.x += nx * pushAmount;
+    body.y += ny * pushAmount;
+    other.x -= nx * pushAmount;
+    other.y -= ny * pushAmount;
+  }
+}
+
 export function advanceBody(
   body: MovingBody,
   dt: number,
@@ -177,33 +254,35 @@ export function resolveBodyOverlaps(
     for (let j = i + 1; j < bodies.length; j += 1) {
       const a = bodies[i];
       const b = bodies[j];
-      const delta = LJS.vec2(a.x - b.x, a.y - b.y);
-      let dist = delta.length();
-      if (dist >= minDistance) continue;
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq >= minDistance * minDistance) continue;
 
-      let normal = delta;
+      const dist = Math.sqrt(distSq);
+      let nx, ny;
       if (dist < 0.0001) {
         const phase = seedForPair ? seedForPair(a, b) : 0;
-        normal = LJS.vec2(Math.cos(phase), Math.sin(phase));
-        dist = 0;
+        nx = Math.cos(phase);
+        ny = Math.sin(phase);
       } else {
-        normal = normal.scale(1 / dist);
+        nx = dx / dist;
+        ny = dy / dist;
       }
 
-      const pushAmount = (minDistance - dist) * 0.5;
-      const push = normal.scale(pushAmount);
-      a.x += push.x;
-      a.y += push.y;
-      b.x -= push.x;
-      b.y -= push.y;
+      const pushAmount = (minDistance - dist) * 0.2;
+      a.x += nx * pushAmount;
+      a.y += ny * pushAmount;
+      b.x -= nx * pushAmount;
+      b.y -= ny * pushAmount;
     }
   }
 }
 
 function clampBodySpeed(body: MovingBody, maxSpeed: number): void {
-  const speed = Math.hypot(body.dx, body.dy);
-  if (speed <= maxSpeed) return;
-  const n = LJS.vec2(body.dx, body.dy).normalize().scale(maxSpeed);
-  body.dx = n.x;
-  body.dy = n.y;
+  const speedSq = body.dx * body.dx + body.dy * body.dy;
+  if (speedSq <= maxSpeed * maxSpeed) return;
+  const invSpeed = maxSpeed / Math.sqrt(speedSq);
+  body.dx *= invSpeed;
+  body.dy *= invSpeed;
 }

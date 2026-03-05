@@ -7,7 +7,7 @@ function makeImage(svgBody: string): HTMLImageElement {
 }
 
 const C = {
-  yurt: '#fff',
+  house: '#fff',
   ox: '#b75',
   goat: '#abb',
   fish: '#f80',
@@ -17,13 +17,15 @@ const C = {
   ui: '#443'
 } as const;
 
-const makeYurt = (stroke: string) => makeImage(`
+const makeHouse = (stroke: string) =>
+  makeImage(`
   <path d='M35 65 58 65' stroke='${C.shade2}' stroke-width='6' stroke-linecap='round'/>
-  <circle cx='50' cy='50' r='24' fill='${C.yurt}'/>
+  <circle cx='50' cy='50' r='24' fill='${C.house}'/>
   <circle cx='50' cy='50' r='8' fill='none' stroke='${stroke}' stroke-width='3.3'/>
 `);
 
-const makeFarmPin = (stroke: string) => makeImage(`
+const makeFarmPin = (stroke: string) =>
+  makeImage(`
   <rect x='15' y='15' width='70' height='70' rx='12' fill='none' stroke='${stroke}' stroke-width='5'/>
   <circle cx='50' cy='50' r='9' fill='${stroke}'/>
 `);
@@ -41,9 +43,9 @@ export const sprites = {
     <circle cx='50' cy='36' r='8' fill='${C.ox}'/>
     <path d='M42 46 Q50 43 58 46 L58 69 Q50 72 42 69 Z' fill='${C.ui}'/>
   `),
-  yurtOx: makeYurt(C.ox),
-  yurtGoat: makeYurt(C.goat),
-  yurtFish: makeYurt(C.fish),
+  houseOx: makeHouse(C.ox),
+  houseGoat: makeHouse(C.goat),
+  houseFish: makeHouse(C.fish),
   farmOx: makeFarmPin(C.ox),
   farmGoat: makeFarmPin(C.goat),
   farmFish: makeFarmPin(C.fish)

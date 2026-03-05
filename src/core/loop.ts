@@ -8,6 +8,7 @@ export function wireEngine(game: Game): void {
   function gameInit(): void {
     LJS.setShowSplashScreen(false);
     LJS.setCanvasPixelated(false);
+    LJS.setCanvasClearColor(new LJS.Color().setHex('#8a5')); // COLORS.grass
     game.init();
   }
 
@@ -28,5 +29,13 @@ export function wireEngine(game: Game): void {
   function gameRenderPost(): void {}
 
   const root = document.getElementById('game-root') ?? document.body;
-  void LJS.engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost, [], root);
+  void LJS.engineInit(
+    gameInit,
+    gameUpdate,
+    gameUpdatePost,
+    gameRender,
+    gameRenderPost,
+    [],
+    root
+  );
 }

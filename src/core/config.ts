@@ -5,6 +5,7 @@ export const GAME_CONFIG = {
   mapWidth: 40,
   mapHeight: 24,
   cameraScale: 32,
+  gridCellSize: 8,
   dayLengthSeconds: 20,
   autosaveIntervalSeconds: 10,
   startingResources: {

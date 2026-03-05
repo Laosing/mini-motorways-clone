@@ -6,22 +6,23 @@ import { EventBus } from './events';
 import { GridMap } from '@world/GridMap';
 import { generateWorld } from '@world/generation';
 import { applyCamera, type Camera } from '@world/camera';
-import type {
+import {
   Building,
-  DestinationType,
-  FarmAnimalState
+  type StructureRole,
+  type DestinationType,
+  type FarmAnimalState
 } from '@entities/Building';
-import type { Villager } from '@entities/Villager';
-import { makeId, primeIdCounterFromIds } from '@entities/Entity';
+import { Villager } from '@entities/Villager';
+import { type Entity, makeId, primeIdCounterFromIds } from '@entities/Entity';
 import { drawWorld } from '@systems/renderSystem';
 import { handleInput } from '@systems/inputSystem';
 import { updateVillagers } from '@systems/taskSystem';
 import { loadSnapshot, saveNow } from '@systems/saveSystem';
 import { setupHUD, updateHUD } from '@ui/hud';
 import type { PathEdge } from '@systems/pathNetwork';
-import { renderSvgScene } from '@ui/svgRenderer';
+import { FarmAnimal } from '@entities/Animal';
 
-const SPAWNING_LOOP_LENGTH = 3000;
+const SPAWNING_LOOP_LENGTH = 600;
 const TYPES: DestinationType[] = ['ox', 'goat', 'fish'];
 
 interface SpawnPositionOptions {
@@ -37,8 +38,8 @@ export interface Snapshot {
   day: number;
   timeInDay: number;
   gridTiles: ReturnType<GridMap['snapshot']>;
-  buildings: Building[];
-  villagers: Villager[];
+  buildings: any[];
+  villagers: any[];
   paths: PathEdge[];
   seed: number;
   servedTrips: number;
@@ -66,8 +67,9 @@ export class Game {
   private updateRandomness2 = 0;
   private updateRandomness3 = 0;
   private updateRandomness4 = 0;
-  private yurtFailed = false;
+  private houseFailed = false;
   autoSpawningEnabled = true;
+  private animalMap = new Map<string, FarmAnimal>();
 
   constructor(seed = Date.now() >>> 0) {
     this.rng = new SeededRng(seed);
@@ -85,12 +87,14 @@ export class Game {
     const isCompatibleSave = Boolean(
       loaded &&
       Array.isArray(loaded.buildings) &&
-      loaded.buildings.every((b) => b.role === 'yurt' || b.role === 'farm')
+      loaded.buildings.every(
+        (b) => b.role === 'yurt' || b.role === 'house' || b.role === 'farm'
+      )
     );
 
     if (loaded && isCompatibleSave) {
       this.restore(loaded);
-      this.ensureTwoVillagersPerYurt();
+      this.ensureTwoVillagersPerHouse();
       this.statusText = 'Loaded save';
     } else {
       generateWorld(this.grid, this.rng);
@@ -144,13 +148,48 @@ export class Game {
       this.day += 1;
     }
 
+    this.syncAnimalGameObjects();
+
     updateHUD(this);
+  }
+
+  private activeIdsBuffer = new Set<string>();
+
+  private syncAnimalGameObjects() {
+    this.activeIdsBuffer.clear();
+
+    for (let i = 0; i < this.buildings.length; i++) {
+      const building = this.buildings[i];
+      const states = building.animals ?? [];
+      for (let j = 0; j < states.length; j++) {
+        const state = states[j];
+        this.activeIdsBuffer.add(state.id);
+        let animal = this.animalMap.get(state.id);
+        if (!animal) {
+          const padding = 2.5;
+          const initialX =
+            this.rng.next() * (building.width * 8 - padding * 2) + padding;
+          const initialY =
+            this.rng.next() * (building.height * 8 - padding * 2) + padding;
+          animal = new FarmAnimal(building, state.id, initialX, initialY);
+          this.animalMap.set(state.id, animal);
+        }
+        animal.hasDemand = state.hasDemand;
+      }
+    }
+
+    // Cleanup stale animals
+    for (const [id, animal] of this.animalMap.entries()) {
+      if (!this.activeIdsBuffer.has(id)) {
+        animal.destroy();
+        this.animalMap.delete(id);
+      }
+    }
   }
 
   render(): void {
     applyCamera(this.camera);
     drawWorld(this);
-    renderSvgScene(this);
   }
 
   save(): void {
@@ -162,8 +201,76 @@ export class Game {
     return this.buildings.filter((b) => b.role === 'farm');
   }
 
-  get yurts(): Building[] {
-    return this.buildings.filter((b) => b.role === 'yurt');
+  get houses(): Building[] {
+    return this.buildings.filter((b) => b.role === 'house');
+  }
+
+  get animalCount(): number {
+    return this.animalMap.size;
+  }
+
+  get oxenCount(): number {
+    let count = 0;
+    for (const animal of this.animalMap.values()) {
+      if (animal.kind === 'ox') count++;
+    }
+    return count;
+  }
+
+  get sheepCount(): number {
+    let count = 0;
+    for (const animal of this.animalMap.values()) {
+      if (animal.kind === 'goat') count++;
+    }
+    return count;
+  }
+
+  get fishCount(): number {
+    let count = 0;
+    for (const animal of this.animalMap.values()) {
+      if (animal.kind === 'fish') count++;
+    }
+    return count;
+  }
+
+  /** Test Helper: Manually add a building at a specific location */
+  public addTestBuilding(
+    x: number,
+    y: number,
+    role: StructureRole,
+    type: DestinationType,
+    width = 1,
+    height = 1
+  ): Building {
+    const building = new Building(
+      LJS.vec2(x + (width - 1) / 2, y + (height - 1) / 2),
+      LJS.vec2(width, height),
+      makeId(role),
+      role,
+      type
+    );
+    this.buildings.push(building);
+    this.setStructureOccupancy(building, building.id);
+    if (role === 'farm') {
+      const cfg = this.farmConfig(type);
+      building.needyness = cfg.needyness;
+      building.numAnimals = cfg.numAnimals;
+      this.ensureFarmAnimals(building);
+    }
+    return building;
+  }
+
+  /** Test Helper: Rapidly add a path between two points */
+  public addTestPath(x1: number, y1: number, x2: number, y2: number): void {
+    this.paths.push({ a: { x: x1, y: y1 }, b: { x: x2, y: y2 } });
+  }
+
+  /** Test Helper: Get an entity by its ID */
+  public getEntityById(id: string): Entity | undefined {
+    return (
+      this.buildings.find((b) => b.id === id) ||
+      this.villagers.find((v) => v.id === id)
+    );
   }
 
   toSnapshot(): Snapshot {
@@ -172,11 +279,40 @@ export class Game {
       timeInDay: this.timeInDay,
       gridTiles: this.grid.snapshot(),
       buildings: this.buildings.map((b) => ({
-        ...b,
+        id: b.id,
+        role: b.role,
+        destination: b.destination,
+        width: b.width,
+        height: b.height,
+        x: b.x,
+        y: b.y,
+        pos: { x: b.pos.x, y: b.pos.y },
+        size: { x: b.size.x, y: b.size.y },
         assignedVillagerIds: [...b.assignedVillagerIds],
-        animals: b.animals?.map((a) => ({ ...a }))
+        animals: b.animals?.map((a) => ({ ...a })),
+        active: b.active,
+        demand: b.demand,
+        numIssues: b.numIssues,
+        needyness: b.needyness,
+        numAnimals: b.numAnimals
       })),
-      villagers: this.villagers.map((v) => ({ ...v, path: [...v.path] })),
+      villagers: this.villagers.map((v) => ({
+        id: v.id,
+        x: v.x,
+        y: v.y,
+        pos: { x: v.pos.x, y: v.pos.y },
+        homeHouseId: v.homeHouseId,
+        destinationType: v.destinationType,
+        task: v.task,
+        path: [...v.path],
+        assignedFarmId: v.assignedFarmId,
+        dx: v.dx,
+        dy: v.dy,
+        rotation: v.rotation,
+        originalRouteLength: v.originalRouteLength,
+        lastReachedPos: v.lastReachedPos ? { ...v.lastReachedPos } : null,
+        waitTimer: v.waitTimer
+      })),
       paths: this.paths.map((p) => ({ a: { ...p.a }, b: { ...p.b } })),
       seed: this.rng.getSeed(),
       servedTrips: this.servedTrips,
@@ -200,16 +336,41 @@ export class Game {
     ];
     primeIdCounterFromIds(incomingIds);
 
-    this.buildings = snapshot.buildings.map((b) => ({
-      ...b,
-      assignedVillagerIds: [...(b.assignedVillagerIds ?? [])],
-      animals: b.animals?.map((a) => ({ ...a }))
-    }));
+    this.buildings = snapshot.buildings.map((b) => {
+      const width = b.width ?? 1;
+      const height = b.height ?? 1;
+
+      // Fallback for different save formats
+      let pos: LJS.Vector2;
+      if (b.pos && typeof b.pos.x === 'number') {
+        pos = LJS.vec2(b.pos.x, b.pos.y);
+      } else if (typeof b.x === 'number') {
+        pos = LJS.vec2(b.x + (width - 1) / 2, b.y + (height - 1) / 2);
+      } else {
+        // Absolute fallback to avoid NaN crash
+        pos = LJS.vec2(GAME_CONFIG.mapWidth / 2, GAME_CONFIG.mapHeight / 2);
+      }
+
+      const building = new Building(
+        pos,
+        LJS.vec2(width, height),
+        b.id,
+        b.role === 'yurt' ? 'house' : b.role,
+        b.destination,
+        b.needyness,
+        b.numAnimals
+      );
+      building.assignedVillagerIds = [...(b.assignedVillagerIds ?? [])];
+      building.animals = b.animals?.map((a: any) => ({ ...a }));
+      building.active = b.active ?? true;
+      building.demand = b.demand ?? 0;
+      building.numIssues = b.numIssues ?? 0;
+      return building;
+    });
 
     const seenVillagerIds = new Set<string>();
-    this.villagers = snapshot.villagers.map((v) => ({
-      ...v,
-      id: (() => {
+    this.villagers = snapshot.villagers.map((v) => {
+      const vid = (() => {
         if (!seenVillagerIds.has(v.id)) {
           seenVillagerIds.add(v.id);
           return v.id;
@@ -218,15 +379,31 @@ export class Game {
         while (seenVillagerIds.has(uniqueId)) uniqueId = makeId('person');
         seenVillagerIds.add(uniqueId);
         return uniqueId;
-      })(),
-      path: [...v.path],
-      assignedFarmId: v.assignedFarmId ?? null,
-      dx: v.dx ?? 0,
-      dy: v.dy ?? 0,
-      rotation: v.rotation ?? 0,
-      originalRouteLength: v.originalRouteLength ?? v.path.length,
-      lastReachedPos: v.lastReachedPos ?? null
-    }));
+      })();
+
+      let pos: LJS.Vector2;
+      if (v.pos && typeof v.pos.x === 'number') {
+        pos = LJS.vec2(v.pos.x, v.pos.y);
+      } else if (typeof v.x === 'number') {
+        pos = LJS.vec2(v.x, v.y);
+      } else {
+        pos = LJS.vec2(0, 0);
+      }
+
+      const homeId = v.homeHouseId || v.homeYurtId;
+      const villager = new Villager(pos, vid, homeId, v.destinationType);
+      villager.task = v.task;
+      villager.path = [...(v.path ?? [])];
+      villager.assignedFarmId = v.assignedFarmId ?? null;
+      villager.dx = v.dx ?? 0;
+      villager.dy = v.dy ?? 0;
+      villager.rotation = v.rotation ?? 0;
+      villager.originalRouteLength =
+        v.originalRouteLength ?? v.path?.length ?? 0;
+      villager.lastReachedPos = v.lastReachedPos ?? null;
+      villager.waitTimer = v.waitTimer ?? 0;
+      return villager;
+    });
     this.paths = (snapshot.paths ?? []).map((p) => ({
       a: { ...p.a },
       b: { ...p.b }
@@ -239,7 +416,7 @@ export class Game {
     this.rebuildOccupancyFromStructures();
   }
 
-  private updateFarmDemand(dt: number): void {
+  public updateFarmDemand(dt: number): void {
     for (const farm of this.farms) {
       this.ensureFarmAnimals(farm);
       for (const animal of farm.animals ?? []) {
@@ -282,21 +459,21 @@ export class Game {
     let upgradedThisLoop = false;
 
     if (this.updateCount % SPAWNING_LOOP_LENGTH === 0) {
-      this.updateRandomness1 = this.rng.int(0, 200);
-      this.updateRandomness2 = this.rng.int(0, 200);
-      this.updateRandomness3 = this.rng.int(0, 200);
-      this.updateRandomness4 = this.rng.int(0, 200);
+      this.updateRandomness1 = this.rng.int(0, 40);
+      this.updateRandomness2 = this.rng.int(0, 40);
+      this.updateRandomness3 = this.rng.int(0, 40);
+      this.updateRandomness4 = this.rng.int(0, 40);
     }
 
     if (
       this.updateCount === 0 ||
-      (this.updateCount > 1000 &&
+      (this.updateCount > 200 &&
         this.updateCount % SPAWNING_LOOP_LENGTH ===
           (this.farms.length ? this.updateRandomness1 : 0))
     ) {
       if (
         !this.trySpawnFarm(
-          this.updateCount > 10000 &&
+          this.updateCount > 2000 &&
             !this.farms.some((f) => f.destination === 'fish')
             ? 'fish'
             : this.getRandomNewType()
@@ -313,55 +490,55 @@ export class Game {
 
     if (
       this.updateCount % SPAWNING_LOOP_LENGTH ===
-      500 + (this.farms.length > 1 ? this.updateRandomness2 : 0)
+      100 + (this.farms.length > 1 ? this.updateRandomness2 : 0)
     ) {
-      this.yurtFailed = !this.trySpawnFirstYurtOfLoop();
+      this.houseFailed = !this.trySpawnFirstHouseOfLoop();
       return;
     }
 
     if (
-      this.yurtFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 600 + this.updateRandomness2
+      this.houseFailed &&
+      this.updateCount % SPAWNING_LOOP_LENGTH === 120 + this.updateRandomness2
     ) {
-      this.yurtFailed = !this.trySpawnFirstYurtOfLoop();
+      this.houseFailed = !this.trySpawnFirstHouseOfLoop();
       return;
     }
 
     if (
-      this.yurtFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 700 + this.updateRandomness2
+      this.houseFailed &&
+      this.updateCount % SPAWNING_LOOP_LENGTH === 140 + this.updateRandomness2
     ) {
-      this.yurtFailed = !this.trySpawnFirstYurtOfLoop();
+      this.houseFailed = !this.trySpawnFirstHouseOfLoop();
       return;
     }
 
     if (
       this.updateCount % SPAWNING_LOOP_LENGTH ===
-      1500 + this.updateRandomness3
+      300 + this.updateRandomness3
     ) {
-      this.yurtFailed = !this.trySpawnSecondYurtOfLoop();
+      this.houseFailed = !this.trySpawnSecondHouseOfLoop();
       return;
     }
 
     if (
-      this.yurtFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 1600 + this.updateRandomness3
+      this.houseFailed &&
+      this.updateCount % SPAWNING_LOOP_LENGTH === 320 + this.updateRandomness3
     ) {
-      this.yurtFailed = !this.trySpawnSecondYurtOfLoop();
+      this.houseFailed = !this.trySpawnSecondHouseOfLoop();
       return;
     }
 
     if (
-      this.yurtFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 1700 + this.updateRandomness3
+      this.houseFailed &&
+      this.updateCount % SPAWNING_LOOP_LENGTH === 340 + this.updateRandomness3
     ) {
-      this.yurtFailed = !this.trySpawnSecondYurtOfLoop();
+      this.houseFailed = !this.trySpawnSecondHouseOfLoop();
       return;
     }
 
     if (
-      this.updateCount > 20000 &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 2500 + this.updateRandomness4
+      this.updateCount > 4000 &&
+      this.updateCount % SPAWNING_LOOP_LENGTH === 500 + this.updateRandomness4
     ) {
       if (!this.trySpawnFarm(this.getRandomNewType())) {
         for (const farm of this.farms) {
@@ -400,23 +577,18 @@ export class Game {
     if (!pos) return false;
 
     const cfg = this.farmConfig(destination);
-    const farm: Building = {
-      id: makeId('farm'),
-      type: 'building',
-      role: 'farm',
+    const farm = new Building(
+      LJS.vec2(
+        pos.x + (farmProps.width - 1) / 2,
+        pos.y + (farmProps.height - 1) / 2
+      ),
+      LJS.vec2(farmProps.width, farmProps.height),
+      makeId('farm'),
+      'farm',
       destination,
-      width: farmProps.width,
-      height: farmProps.height,
-      x: pos.x,
-      y: pos.y,
-      active: true,
-      demand: 0,
-      needyness: cfg.needyness,
-      numAnimals: cfg.numAnimals,
-      numIssues: 0,
-      assignedVillagerIds: [],
-      animals: []
-    };
+      cfg.needyness,
+      cfg.numAnimals
+    );
     this.ensureFarmAnimals(farm);
     this.buildings.push(farm);
     this.setStructureOccupancy(farm, farm.id);
@@ -451,8 +623,8 @@ export class Game {
     return true;
   }
 
-  private trySpawnFirstYurtOfLoop(): boolean {
-    const farm = this.pickFarmForFirstYurt();
+  private trySpawnFirstHouseOfLoop(): boolean {
+    const farm = this.pickFarmForFirstHouse();
     if (!farm) return false;
 
     const pos = this.getRandomPosition({
@@ -463,114 +635,85 @@ export class Game {
     });
     if (!pos) return false;
 
-    this.spawnYurtAt(pos.x, pos.y, farm.destination);
+    this.spawnHouseAt(pos.x, pos.y, farm.destination);
     return true;
   }
 
-  private trySpawnSecondYurtOfLoop(): boolean {
+  private trySpawnSecondHouseOfLoop(): boolean {
     const type = this.getRandomExistingType();
-    const sameTypeYurts = this.yurts.filter((y) => y.destination === type);
-    const friendYurt = sameTypeYurts.length
-      ? sameTypeYurts[this.rng.int(0, sameTypeYurts.length)]
+    const sameTypeHouses = this.houses.filter((y) => y.destination === type);
+    const friendHouse = sameTypeHouses.length
+      ? sameTypeHouses[this.rng.int(0, sameTypeHouses.length)]
       : null;
-    if (!friendYurt) return false;
+    if (!friendHouse) return false;
 
     const pos = this.getRandomPosition({
-      anchor: { x: friendYurt.x, y: friendYurt.y, width: 1, height: 1 },
+      anchor: { x: friendHouse.x, y: friendHouse.y, width: 1, height: 1 },
       minDistance: 1,
       maxDistance: Math.max(2, this.farms.length),
       maxNumAttempts: 40
     });
     if (!pos) return false;
 
-    this.spawnYurtAt(pos.x, pos.y, type);
+    this.spawnHouseAt(pos.x, pos.y, type);
     return true;
   }
 
-  private spawnYurtAt(
+  public spawnHouseAt(
     x: number,
     y: number,
     destination: DestinationType
   ): void {
-    const yurt: Building = {
-      id: makeId('yurt'),
-      type: 'building',
-      role: 'yurt',
-      destination,
-      width: 1,
-      height: 1,
-      x,
-      y,
-      active: true,
-      demand: 0,
-      needyness: 0,
-      numAnimals: 0,
-      numIssues: 0,
-      assignedVillagerIds: []
-    };
-    this.buildings.push(yurt);
-    this.setStructureOccupancy(yurt, yurt.id);
+    const house = new Building(
+      LJS.vec2(x, y),
+      LJS.vec2(1, 1),
+      makeId('house'),
+      'house',
+      destination
+    );
+    this.buildings.push(house);
+    this.setStructureOccupancy(house, house.id);
 
     for (let p = 0; p < 2; p += 1) {
       const varianceX = this.rng.next() * 0.5 - 0.25;
       const varianceY = this.rng.next() * 0.5 - 0.25;
-      this.villagers.push({
-        id: makeId('person'),
-        type: 'villager',
-        x: x + varianceX,
-        y: y + varianceY,
-        speed: 2,
-        task: 'idle',
-        homeYurtId: yurt.id,
-        destinationType: destination,
-        target: null,
-        path: [],
-        waitTimer: 0,
-        assignedFarmId: null,
-        dx: 0,
-        dy: 0,
-        rotation: 0,
-        originalRouteLength: 0,
-        lastReachedPos: null
-      });
+      this.villagers.push(
+        new Villager(
+          LJS.vec2(x + varianceX, y + varianceY),
+          makeId('person'),
+          house.id,
+          destination
+        )
+      );
     }
   }
 
-  private ensureTwoVillagersPerYurt(): void {
-    for (const yurt of this.yurts) {
-      const residents = this.villagers.filter((v) => v.homeYurtId === yurt.id);
+  private ensureTwoVillagersPerHouse(): void {
+    for (const house of this.houses) {
+      const residents = this.villagers.filter(
+        (v) => v.homeHouseId === house.id
+      );
       const missing = Math.max(0, 2 - residents.length);
       for (let i = 0; i < missing; i += 1) {
         const varianceX = this.rng.next() * 0.5 - 0.25;
         const varianceY = this.rng.next() * 0.5 - 0.25;
-        this.villagers.push({
-          id: makeId('person'),
-          type: 'villager',
-          x: yurt.x + varianceX,
-          y: yurt.y + varianceY,
-          speed: 2,
-          task: 'idle',
-          homeYurtId: yurt.id,
-          destinationType: yurt.destination,
-          target: null,
-          path: [],
-          waitTimer: 0,
-          assignedFarmId: null,
-          dx: 0,
-          dy: 0,
-          rotation: 0,
-          originalRouteLength: 0,
-          lastReachedPos: null
-        });
+        this.villagers.push(
+          new Villager(
+            LJS.vec2(house.x + varianceX, house.y + varianceY),
+            makeId('person'),
+            house.id,
+            house.destination
+          )
+        );
       }
     }
   }
 
-  private pickFarmForFirstYurt(): Building | null {
+  private pickFarmForFirstHouse(): Building | null {
     const fishFarm = this.farms.find((f) => f.destination === 'fish');
-    const fishYurts = this.yurts.filter((y) => y.destination === 'fish');
+    const fishHouses = this.houses.filter((y) => y.destination === 'fish');
 
-    if (fishFarm && fishYurts.length < 2) return fishFarm;
+    if (fishFarm && fishHouses.length < 2) return fishFarm;
     if (!this.farms.length) return null;
     if (this.farms.length > 2)
       return this.farms[this.rng.int(0, this.farms.length)];
@@ -581,7 +724,7 @@ export class Game {
     if (this.farms.length < 2) return TYPES[this.farms.length] ?? 'ox';
 
     const goodTypes = TYPES.filter((t) => {
-      const y = this.yurts.filter((yurt) => yurt.destination === t).length;
+      const y = this.houses.filter((house) => house.destination === t).length;
       const f = this.farms.filter((farm) => farm.destination === t).length;
       return y > f;
     });
@@ -597,7 +740,7 @@ export class Game {
     const scores = TYPES.map((t) => {
       const y = Math.max(
         1,
-        this.yurts.filter((yurt) => yurt.destination === t).length
+        this.houses.filter((house) => house.destination === t).length
       );
       const f = this.farms.filter((farm) => farm.destination === t).length;
       return { t, w: f / y };
@@ -718,18 +861,11 @@ export class Game {
   }
 
   private backfillStructureSizes(): void {
+    // Structural sizes are now handled in constructor, but for legacy saves:
     for (const structure of this.buildings) {
       if (structure.width && structure.height) continue;
-      if (structure.role === 'yurt') {
-        structure.width = 1;
-        structure.height = 1;
-      } else if (structure.destination === 'fish') {
-        structure.width = 2;
-        structure.height = 2;
-      } else {
-        structure.width = 3;
-        structure.height = 2;
-      }
+      // Note: width/height are readonly on Building class now.
+      // This logic should probably be moved to restore if needed.
     }
   }
 
