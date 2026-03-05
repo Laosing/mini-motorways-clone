@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Game } from '@core/Game';
-import { updateVillagers } from '@systems/taskSystem';
-import { Villager } from '@entities/Villager';
+import { updateWorkers } from '@systems/taskSystem';
+import { Worker } from '@entities/Worker';
 import * as LJS from 'littlejsengine';
 
 describe('service loop', () => {
@@ -14,16 +14,16 @@ describe('service loop', () => {
     const house = game.addTestBuilding(0, 0, 'house', 'red');
     const office = game.addTestBuilding(5, 0, 'office', 'red', 3, 2);
 
-    // Create a villager at the house
-    const villager = new Villager(LJS.vec2(0, 0), 'v-1', house.id, 'red');
-    game.villagers = [villager];
+    // Create a worker at the house
+    const worker = new Worker(LJS.vec2(0, 0), 'v-1', house.id, 'red');
+    game.workers = [worker];
 
-    // Villager should start idle
-    expect(villager.task).toBe('idle');
+    // Worker should start idle
+    expect(worker.task).toBe('idle');
 
-    // Update with no demand - villager should stay idle
-    updateVillagers(game, 0.1);
-    expect(villager.task).toBe('idle');
+    // Update with no demand - worker should stay idle
+    updateWorkers(game, 0.1);
+    expect(worker.task).toBe('idle');
 
     // Set up demand on the office
     office.demandTimers = [0];
@@ -45,8 +45,8 @@ describe('service loop', () => {
       y = nextY;
     }
 
-    // After updating with demand and path, villager should get a task
-    updateVillagers(game, 0.1);
-    expect(['toOffice', 'atOffice']).toContain(villager.task);
+    // After updating with demand and path, worker should get a task
+    updateWorkers(game, 0.1);
+    expect(['toOffice', 'atOffice']).toContain(worker.task);
   });
 });

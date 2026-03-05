@@ -113,21 +113,21 @@ describe('Office Demand System', () => {
     expect(yellowOffice.demandTimers[0]).toBeGreaterThan(16);
   });
 
-  it('cleans up assigned villager IDs for non-existent villagers', () => {
+  it('cleans up assigned worker IDs for non-existent workers', () => {
     const game = new Game(1);
     game.init();
     game.startPlay();
 
     const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
-    office.assignedVillagerIds = ['non-existent-1', 'non-existent-2'];
+    office.assignedWorkerIds = ['non-existent-1', 'non-existent-2'];
 
     game.updateOfficeDemand(0);
 
-    // Should remove non-existent villager IDs
-    expect(office.assignedVillagerIds).toHaveLength(0);
+    // Should remove non-existent worker IDs
+    expect(office.assignedWorkerIds).toHaveLength(0);
   });
 
-  it('keeps assigned villager IDs for existing villagers', () => {
+  it('keeps assigned worker IDs for existing workers', () => {
     const game = new Game(1);
     game.init();
     game.startPlay();
@@ -136,12 +136,12 @@ describe('Office Demand System', () => {
     const house = game.addTestBuilding(0, 0, 'house', 'blue');
     game.spawnHouseAt(0, 2, 'blue');
 
-    const villager = game.villagers[0];
-    office.assignedVillagerIds = [villager.id];
+    const worker = game.workers[0];
+    office.assignedWorkerIds = [worker.id];
 
     game.updateOfficeDemand(0);
 
-    expect(office.assignedVillagerIds).toContain(villager.id);
+    expect(office.assignedWorkerIds).toContain(worker.id);
   });
 
   it('handles multiple offices with different destinations', () => {

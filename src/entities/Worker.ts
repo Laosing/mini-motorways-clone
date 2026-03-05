@@ -3,13 +3,13 @@ import type { Entity } from './Entity';
 import type { DestinationType } from './Building';
 import { COLOR_RESOURCES } from '@core/colors';
 
-export type VillagerTask = 'idle' | 'toOffice' | 'atOffice' | 'toHome';
+export type WorkerTask = 'idle' | 'toOffice' | 'atOffice' | 'toHome';
 
-export class Villager extends LJS.EngineObject implements Entity {
+export class Worker extends LJS.EngineObject implements Entity {
   readonly id: string;
-  readonly type = 'villager';
+  readonly type = 'worker';
   speed: number = 2;
-  task: VillagerTask = 'idle';
+  task: WorkerTask = 'idle';
   homeHouseId: string;
   destinationType: DestinationType;
   target: { x: number; y: number } | null = null;
@@ -86,31 +86,31 @@ export class Villager extends LJS.EngineObject implements Entity {
             : COLOR_RESOURCES.ui;
 
     // Render shadow
-    Villager._cachedOffset.set(0.02, -0.02);
-    Villager._cachedPos.set(
-      this.pos.x + Villager._cachedOffset.x,
-      this.pos.y + Villager._cachedOffset.y
+    Worker._cachedOffset.set(0.02, -0.02);
+    Worker._cachedPos.set(
+      this.pos.x + Worker._cachedOffset.x,
+      this.pos.y + Worker._cachedOffset.y
     );
-    LJS.drawCircle(Villager._cachedPos, 0.17, COLOR_RESOURCES.shadow);
+    LJS.drawCircle(Worker._cachedPos, 0.17, COLOR_RESOURCES.shadow);
 
     // Render body
-    Villager._cachedBodySize.set(0.34, 0.34);
-    LJS.drawEllipse(this.pos, Villager._cachedBodySize, color, this.angle);
+    Worker._cachedBodySize.set(0.34, 0.34);
+    LJS.drawEllipse(this.pos, Worker._cachedBodySize, color, this.angle);
 
     // Render head (the little dot indicating direction)
     const cosAngle = Math.cos(-this.angle);
     const sinAngle = Math.sin(-this.angle);
     const hx = 0.12;
     const hy = 0;
-    Villager._cachedOffset.set(
+    Worker._cachedOffset.set(
       hx * cosAngle - hy * sinAngle,
       hx * sinAngle + hy * cosAngle
     );
 
-    Villager._cachedPos.set(
-      this.pos.x + Villager._cachedOffset.x,
-      this.pos.y + Villager._cachedOffset.y
+    Worker._cachedPos.set(
+      this.pos.x + Worker._cachedOffset.x,
+      this.pos.y + Worker._cachedOffset.y
     );
-    LJS.drawCircle(Villager._cachedPos, 0.08, COLOR_RESOURCES.ui, 0);
+    LJS.drawCircle(Worker._cachedPos, 0.08, COLOR_RESOURCES.ui, 0);
   }
 }

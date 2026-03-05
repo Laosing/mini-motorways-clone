@@ -126,7 +126,7 @@ describe('Building', () => {
     expect(office.y).toBeCloseTo(9.5, 1);
   });
 
-  it('sets assigned villager IDs correctly', () => {
+  it('sets assigned worker IDs correctly', () => {
     const office = new Building(
       LJS.vec2(0, 0),
       LJS.vec2(1, 1),
@@ -137,10 +137,10 @@ describe('Building', () => {
       { x: 0, y: 0 }
     );
 
-    office.assignedVillagerIds = ['villager-1', 'villager-2'];
+    office.assignedWorkerIds = ['worker-1', 'worker-2'];
 
-    expect(office.assignedVillagerIds).toHaveLength(2);
-    expect(office.assignedVillagerIds).toContain('villager-1');
+    expect(office.assignedWorkerIds).toHaveLength(2);
+    expect(office.assignedWorkerIds).toContain('worker-1');
   });
 
   it('correctly computes position from tile coordinates', () => {
@@ -161,7 +161,11 @@ describe('Building', () => {
   });
 
   it('supports all three destination types', () => {
-    const destinations: Array<'red' | 'blue' | 'yellow'> = ['red', 'blue', 'yellow'];
+    const destinations: Array<'red' | 'blue' | 'yellow'> = [
+      'red',
+      'blue',
+      'yellow'
+    ];
 
     for (const dest of destinations) {
       const building = new Building(

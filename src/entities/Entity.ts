@@ -1,6 +1,6 @@
 export interface Entity {
   id: string;
-  type: 'building' | 'villager' | 'resourceNode';
+  type: 'building' | 'worker' | 'resourceNode';
   x: number;
   y: number;
 }

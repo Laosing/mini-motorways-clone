@@ -13,7 +13,7 @@ These rules are mandatory unless the user explicitly asks to change them.
   - `handleInput(game)`
   - `spawnBySchedule()`
   - `updateOfficeDemand(dt)`
-  - `updateVillagers(game, dt)`
+  - `updateWorkers(game, dt)`
   - time/day progression and HUD update
 - `Space` toggles pause/play.
 - `S` saves the game.
@@ -29,7 +29,7 @@ Authoritative files:
 - Left-drag creates path edges one tile step at a time.
 - Right mouse button erases edges touching the hovered tile.
 - Path edges must remain adjacency-based (local grid neighbors).
-- Villagers must use the path network for routing (`findPathOnNetwork`).
+- Workers must use the path network for routing (`findPathOnNetwork`).
 
 Authoritative files:
 
@@ -39,16 +39,16 @@ Authoritative files:
 
 ### 3) Service loop must remain intact
 
-- Villagers are assigned only when:
-  - villager is `idle`
-  - villager `destinationType` matches office `destination`
+- Workers are assigned only when:
+  - worker is `idle`
+  - worker `destinationType` matches office `destination`
   - a valid network route exists
-- Villager task lifecycle must remain:
+- Worker task lifecycle must remain:
   - `idle` -> `toOffice` -> `atOffice` -> `toHome` -> `idle`
 - On office arrival:
   - one office issue is consumed
   - `servedTrips` increments
-  - villager waits, then returns home by route
+  - worker waits, then returns home by route
 - If no valid return/home/office route, fallback to stable idle behavior (no crashes/NaN positions).
 
 Authoritative file:
@@ -70,15 +70,15 @@ Authoritative file:
 
 - Scheduled spawning/upgrading for offices and houses must remain active.
 - Destination types remain: `red`, `blue`, `yellow`.
-- Houses spawn villagers (2 residents per house target), and save restore keeps this invariant.
+- Houses spawn workers (2 residents per house target), and save restore keeps this invariant.
 
 Authoritative file:
 
-- `src/core/Game.ts` (`spawnBySchedule`, spawn helpers, `ensureTwoVillagersPerHouse`)
+- `src/core/Game.ts` (`spawnBySchedule`, spawn helpers, `ensureTwoWorkersPerHouse`)
 
 ### 6) Save/load compatibility must remain
 
-- Snapshot includes buildings, villagers, paths, seed, servedTrips, updateCount, and time/day.
+- Snapshot includes buildings, workers, paths, seed, servedTrips, updateCount, and time/day.
 - Loading old-compatible saves must backfill structure sizes and office demand state safely.
 - Save key remains stable unless user asks for migration/versioning changes.
 
@@ -92,23 +92,23 @@ Authoritative files:
 
 - Building roles: `house` and `office`.
 - Destination types: `red`, `blue`, `yellow`.
-- Villager tasks: `idle`, `toOffice`, `atOffice`, `toHome`.
+- Worker tasks: `idle`, `toOffice`, `atOffice`, `toHome`.
 
 Authoritative files:
 
 - `src/entities/Building.ts`
-- `src/entities/Villager.ts`
+- `src/entities/Worker.ts`
 
 ## Minimum Regression Checks After Gameplay Changes
 
 - `src/tests/smoke.test.ts`: game boots and enters `Play`.
-- `src/tests/economy.test.ts`: villager remains idle without path, starts service when path exists.
+- `src/tests/economy.test.ts`: worker remains idle without path, starts service when path exists.
 
 If behavior changes intentionally, update tests in the same change.
 
 ## Change Control Rules for AI Agents
 
-1. Do not delete/disable the path-drawing loop, villager task loop, spawn schedule, or office demand logic without explicit user approval.
+1. Do not delete/disable the path-drawing loop, worker task loop, spawn schedule, or office demand logic without explicit user approval.
 2. Do not replace core loops with placeholders/stubs.
 3. Do not rename/remove core task states or destination types unless user requested.
 4. If a request is unclear and could alter core gameplay, ask a clarifying question before editing.
@@ -116,7 +116,7 @@ If behavior changes intentionally, update tests in the same change.
 
 ## What Requires Explicit User Approval First
 
-- Removing or bypassing villager service logic.
+- Removing or bypassing worker service logic.
 - Removing office demand timers/issues.
 - Removing path-drawn routing.
 - Disabling automatic house/office spawning and upgrades.

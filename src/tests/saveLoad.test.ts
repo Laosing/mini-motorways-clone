@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Game } from '@core/Game';
-import { Villager } from '@entities/Villager';
+import { Worker } from '@entities/Worker';
 import * as LJS from 'littlejsengine';
 
 // Mock localStorage
@@ -40,7 +40,7 @@ describe('Save/Load System', () => {
     expect(snapshot.day).toBeDefined();
     expect(snapshot.seed).toBe(42);
     expect(snapshot.buildings).toBeInstanceOf(Array);
-    expect(snapshot.villagers).toBeInstanceOf(Array);
+    expect(snapshot.workers).toBeInstanceOf(Array);
     expect(snapshot.paths).toBeInstanceOf(Array);
     expect(snapshot.gridTiles).toBeInstanceOf(Array);
   });
@@ -97,32 +97,32 @@ describe('Save/Load System', () => {
     expect(restoredOffice.height).toBe(3);
   });
 
-  it('restores villager properties correctly', () => {
+  it('restores worker properties correctly', () => {
     const game1 = new Game(1);
     game1.init();
     game1.startPlay();
 
     // Add a house manually to have a known house ID
     const house = game1.addTestBuilding(0, 0, 'house', 'yellow');
-    // Add villagers directly (not through spawnHouseAt which creates another house)
-    const villager1 = new Villager(LJS.vec2(0.25, 0.25), 'v-1', house.id, 'yellow');
-    const villager2 = new Villager(LJS.vec2(0.75, 0.75), 'v-2', house.id, 'yellow');
-    game1.villagers = [villager1, villager2];
+    // Add workers directly (not through spawnHouseAt which creates another house)
+    const worker1 = new Worker(LJS.vec2(0.25, 0.25), 'v-1', house.id, 'yellow');
+    const worker2 = new Worker(LJS.vec2(0.75, 0.75), 'v-2', house.id, 'yellow');
+    game1.workers = [worker1, worker2];
 
-    // Set villager properties
-    const villager = game1.villagers[0];
-    villager.task = 'toOffice';
-    villager.assignedOfficeId = 'some-office';
-    villager.x = 5;
-    villager.y = 5;
+    // Set worker properties
+    const worker = game1.workers[0];
+    worker.task = 'toOffice';
+    worker.assignedOfficeId = 'some-office';
+    worker.x = 5;
+    worker.y = 5;
 
     const snapshot = game1.toSnapshot();
     const game2 = new Game(2);
     game2.restore(snapshot);
 
-    const restored = game2.villagers[0];
+    const restored = game2.workers[0];
 
-    expect(restored.id).toBe(villager.id);
+    expect(restored.id).toBe(worker.id);
     expect(restored.homeHouseId).toBe(house.id);
     expect(restored.destinationType).toBe('yellow');
     expect(restored.task).toBe('toOffice');

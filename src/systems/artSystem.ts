@@ -38,7 +38,7 @@ export const sprites = {
     <circle cx='64' cy='46' r='12' fill='${C.leaf}'/>
     <circle cx='47' cy='49' r='11' fill='${C.leaf}'/>
   `),
-  villager: makeImage(`
+  worker: makeImage(`
     <ellipse cx='56' cy='74' rx='14' ry='8' fill='${C.shade}'/>
     <circle cx='50' cy='36' r='8' fill='${C.red}'/>
     <path d='M42 46 Q50 43 58 46 L58 69 Q50 72 42 69 Z' fill='${C.ui}'/>

@@ -11,11 +11,11 @@ import {
   type StructureRole,
   type DestinationType
 } from '@entities/Building';
-import { Villager } from '@entities/Villager';
+import { Worker } from '@entities/Worker';
 import { type Entity, makeId, primeIdCounterFromIds } from '@entities/Entity';
 import { drawWorld } from '@systems/renderSystem';
 import { handleInput } from '@systems/inputSystem';
-import { updateVillagers } from '@systems/taskSystem';
+import { updateWorkers } from '@systems/taskSystem';
 import { loadSnapshot, saveNow } from '@systems/saveSystem';
 import { setupHUD, updateHUD } from '@ui/hud';
 import type { PathEdge } from '@systems/pathNetwork';
@@ -46,7 +46,7 @@ export interface BuildingSnapshot {
   y: number;
   pos: { x: number; y: number };
   size: { x: number; y: number };
-  assignedVillagerIds: string[];
+  assignedWorkerIds: string[];
   entrance: { x: number; y: number };
   entryTile: { x: number; y: number };
   demandTimers: number[];
@@ -59,14 +59,14 @@ export interface BuildingSnapshot {
   animals?: LegacyAnimal[];
 }
 
-export interface VillagerSnapshot {
+export interface WorkerSnapshot {
   id: string;
   x: number;
   y: number;
   pos: { x: number; y: number };
   homeHouseId: string;
   destinationType: DestinationType;
-  task: import('@entities/Villager').VillagerTask;
+  task: import('@entities/Worker').WorkerTask;
   path: { x: number; y: number }[];
   assignedOfficeId: string | null;
   dx: number;
@@ -82,7 +82,7 @@ export interface Snapshot {
   timeInDay: number;
   gridTiles: ReturnType<GridMap['snapshot']>;
   buildings: BuildingSnapshot[];
-  villagers: VillagerSnapshot[];
+  workers: WorkerSnapshot[];
   paths: PathEdge[];
   seed: number;
   servedTrips: number;
@@ -97,7 +97,7 @@ export class Game {
   grid: GridMap;
   camera: Camera;
   buildings: Building[] = [];
-  villagers: Villager[] = [];
+  workers: Worker[] = [];
   paths: PathEdge[] = [];
   day = 1;
   timeInDay = 0;
@@ -136,7 +136,7 @@ export class Game {
 
     if (loaded && isCompatibleSave) {
       this.restore(loaded);
-      this.ensureTwoVillagersPerHouse();
+      this.ensureTwoWorkersPerHouse();
       this.statusText = 'Loaded save';
     } else {
       generateWorld(this.grid, this.rng);
@@ -181,7 +181,7 @@ export class Game {
 
     this.spawnBySchedule();
     this.updateOfficeDemand(dt);
-    updateVillagers(this, dt);
+    updateWorkers(this, dt);
 
     this.updateCount += 1;
     this.timeInDay += dt;
@@ -278,7 +278,7 @@ export class Game {
   public getEntityById(id: string): Entity | undefined {
     return (
       this.buildings.find((b) => b.id === id) ||
-      this.villagers.find((v) => v.id === id)
+      this.workers.find((v) => v.id === id)
     );
   }
 
@@ -297,7 +297,7 @@ export class Game {
         y: b.y,
         pos: { x: b.pos.x, y: b.pos.y },
         size: { x: b.size.x, y: b.size.y },
-        assignedVillagerIds: [...b.assignedVillagerIds],
+        assignedWorkerIds: [...b.assignedWorkerIds],
         entrance: { ...b.entrance },
         entryTile: { ...b.entryTile },
         demandTimers: [...(b.demandTimers ?? [])],
@@ -307,7 +307,7 @@ export class Game {
         needyness: b.needyness,
         numDemand: b.numDemand
       })),
-      villagers: this.villagers.map((v) => ({
+      workers: this.workers.map((v) => ({
         id: v.id,
         x: v.x,
         y: v.y,
@@ -343,7 +343,7 @@ export class Game {
 
     const incomingIds = [
       ...snapshot.buildings.map((b) => b.id),
-      ...snapshot.villagers.map((v) => v.id)
+      ...snapshot.workers.map((v) => v.id)
     ];
     primeIdCounterFromIds(incomingIds);
 
@@ -373,7 +373,7 @@ export class Game {
         b.needyness,
         b.numDemand
       );
-      building.assignedVillagerIds = [...(b.assignedVillagerIds ?? [])];
+      building.assignedWorkerIds = [...(b.assignedWorkerIds ?? [])];
       building.demandTimers = b.demandTimers
         ? [...b.demandTimers]
         : b.animals
@@ -385,16 +385,16 @@ export class Game {
       return building;
     });
 
-    const seenVillagerIds = new Set<string>();
-    this.villagers = snapshot.villagers.map((v) => {
+    const seenWorkerIds = new Set<string>();
+    this.workers = snapshot.workers.map((v) => {
       const vid = (() => {
-        if (!seenVillagerIds.has(v.id)) {
-          seenVillagerIds.add(v.id);
+        if (!seenWorkerIds.has(v.id)) {
+          seenWorkerIds.add(v.id);
           return v.id;
         }
         let uniqueId = makeId('person');
-        while (seenVillagerIds.has(uniqueId)) uniqueId = makeId('person');
-        seenVillagerIds.add(uniqueId);
+        while (seenWorkerIds.has(uniqueId)) uniqueId = makeId('person');
+        seenWorkerIds.add(uniqueId);
         return uniqueId;
       })();
 
@@ -408,18 +408,17 @@ export class Game {
       }
 
       const homeId = v.homeHouseId || vid;
-      const villager = new Villager(pos, vid, homeId, v.destinationType);
-      villager.task = v.task;
-      villager.path = [...(v.path ?? [])];
-      villager.assignedOfficeId = v.assignedOfficeId ?? null;
-      villager.dx = v.dx ?? 0;
-      villager.dy = v.dy ?? 0;
-      villager.rotation = v.rotation ?? 0;
-      villager.originalRouteLength =
-        v.originalRouteLength ?? v.path?.length ?? 0;
-      villager.lastReachedPos = v.lastReachedPos ?? null;
-      villager.waitTimer = v.waitTimer ?? 0;
-      return villager;
+      const worker = new Worker(pos, vid, homeId, v.destinationType);
+      worker.task = v.task;
+      worker.path = [...(v.path ?? [])];
+      worker.assignedOfficeId = v.assignedOfficeId ?? null;
+      worker.dx = v.dx ?? 0;
+      worker.dy = v.dy ?? 0;
+      worker.rotation = v.rotation ?? 0;
+      worker.originalRouteLength = v.originalRouteLength ?? v.path?.length ?? 0;
+      worker.lastReachedPos = v.lastReachedPos ?? null;
+      worker.waitTimer = v.waitTimer ?? 0;
+      return worker;
     });
     this.paths = (snapshot.paths ?? []).map((p) => ({
       a: { ...p.a },
@@ -449,8 +448,8 @@ export class Game {
       }
       office.numIssues = activeIssues;
       office.demand = office.numIssues * office.needyness;
-      office.assignedVillagerIds = office.assignedVillagerIds.filter((id) =>
-        this.villagers.some((v) => v.id === id)
+      office.assignedWorkerIds = office.assignedWorkerIds.filter((id) =>
+        this.workers.some((v) => v.id === id)
       );
     }
   }
@@ -751,8 +750,8 @@ export class Game {
     for (let p = 0; p < 2; p += 1) {
       const varianceX = this.rng.next() * 0.5 - 0.25;
       const varianceY = this.rng.next() * 0.5 - 0.25;
-      this.villagers.push(
-        new Villager(
+      this.workers.push(
+        new Worker(
           LJS.vec2(x + varianceX, y + varianceY),
           makeId('person'),
           house.id,
@@ -762,17 +761,15 @@ export class Game {
     }
   }
 
-  private ensureTwoVillagersPerHouse(): void {
+  private ensureTwoWorkersPerHouse(): void {
     for (const house of this.houses) {
-      const residents = this.villagers.filter(
-        (v) => v.homeHouseId === house.id
-      );
+      const residents = this.workers.filter((v) => v.homeHouseId === house.id);
       const missing = Math.max(0, 2 - residents.length);
       for (let i = 0; i < missing; i += 1) {
         const varianceX = this.rng.next() * 0.5 - 0.25;
         const varianceY = this.rng.next() * 0.5 - 0.25;
-        this.villagers.push(
-          new Villager(
+        this.workers.push(
+          new Worker(
             LJS.vec2(house.x + varianceX, house.y + varianceY),
             makeId('person'),
             house.id,

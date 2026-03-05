@@ -17,7 +17,7 @@ export class Building extends LJS.EngineObject implements Entity {
   needyness: number = 0;
   numDemand: number = 0;
   numIssues: number = 0; // This will now represent active demand pins
-  assignedVillagerIds: string[] = [];
+  assignedWorkerIds: string[] = [];
   readonly entrance: { x: number; y: number };
   readonly entryTile: { x: number; y: number };
 
@@ -48,7 +48,7 @@ export class Building extends LJS.EngineObject implements Entity {
     this.height = size.y;
     this.needyness = needyness;
     this.numDemand = numDemand;
-    this.renderOrder = 5; // Above terrain, below villagers
+    this.renderOrder = 5; // Above terrain, below workers
 
     // Initialize timers for potential demand "slots"
     for (let i = 0; i < numDemand; i++) {

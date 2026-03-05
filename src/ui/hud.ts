@@ -67,7 +67,7 @@ export function updateHUD(game: Game): void {
       <span>Day: <strong>${game.day}</strong></span>
       <span>Trips: <strong>${game.servedTrips}</strong></span>
       <span>Houses: <strong>${game.houses.length}</strong></span>
-      <span>People: <strong>${game.villagers.length}</strong></span>
+      <span>People: <strong>${game.workers.length}</strong></span>
     </div>
     <div style="margin-top: 10px; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.05);">
       <span style="color: #F15B5B;">Red: ${game.redCount}</span> |
