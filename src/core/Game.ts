@@ -211,7 +211,8 @@ export class Game {
       makeId(role),
       role,
       type,
-      entrance
+      entrance,
+      { x, y }
     );
     this.buildings.push(building);
     this.setStructureOccupancy(building, building.id);
@@ -255,6 +256,7 @@ export class Game {
         size: { x: b.size.x, y: b.size.y },
         assignedVillagerIds: [...b.assignedVillagerIds],
         entrance: { ...b.entrance },
+        entryTile: { ...b.entryTile },
         demandTimers: [...(b.demandTimers ?? [])],
         active: b.active,
         demand: b.demand,
@@ -323,7 +325,8 @@ export class Game {
         b.id,
         b.role === 'yurt' ? 'house' : b.role,
         b.destination,
-        b.entrance || { x: Math.round(pos.x), y: Math.round(pos.y) + 1 }, // Fallback for old saves
+        b.entrance || { x: Math.round(pos.x), y: Math.round(pos.y) + 1 }, // Fallback
+        b.entryTile || { x: Math.round(pos.x), y: Math.round(pos.y) }, // Fallback
         b.needyness,
         b.numAnimals
       );
@@ -571,6 +574,12 @@ export class Game {
         ? validEntrances[this.rng.int(0, validEntrances.length)]
         : { x: pos.x, y: pos.y - 1 };
 
+    // Find the tile inside the farm that is closest to the entrance tile
+    const entryTile = {
+      x: Math.max(pos.x, Math.min(pos.x + farmProps.width - 1, entrance.x)),
+      y: Math.max(pos.y, Math.min(pos.y + farmProps.height - 1, entrance.y))
+    };
+
     const farm = new Building(
       LJS.vec2(
         pos.x + (farmProps.width - 1) / 2,
@@ -581,6 +590,7 @@ export class Game {
       'farm',
       destination,
       entrance,
+      entryTile,
       cfg.needyness,
       cfg.numAnimals
     );
@@ -589,16 +599,7 @@ export class Game {
     this.setStructureOccupancy(farm, farm.id);
 
     // Add exactly one starter path segment from the farm to its entrance
-    // Find the tile inside the farm that is closest to the entrance tile
-    const insideX = Math.max(
-      pos.x,
-      Math.min(pos.x + farmProps.width - 1, entrance.x)
-    );
-    const insideY = Math.max(
-      pos.y,
-      Math.min(pos.y + farmProps.height - 1, entrance.y)
-    );
-    this.paths.push({ a: { x: insideX, y: insideY }, b: entrance });
+    this.paths.push({ a: entryTile, b: entrance });
     this.pathsChanged = true;
     return true;
   }
@@ -694,7 +695,8 @@ export class Game {
       makeId('house'),
       'house',
       destination,
-      entrance
+      entrance,
+      { x, y }
     );
     this.buildings.push(house);
     this.setStructureOccupancy(house, house.id);

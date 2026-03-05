@@ -12,6 +12,7 @@ import {
   type SteeringConfig
 } from './motion';
 import { findPathOnNetwork } from './pathNetwork';
+import { toKey } from '@utils/grid';
 
 const PX_TO_CELL = 1 / 8;
 const CLOSE_ENOUGH = 2 * PX_TO_CELL;
@@ -234,73 +235,99 @@ function applyVillagerCrowdAvoidance(game: Game, villager: Villager): void {
 }
 
 function assignPeopleToFarmIssues(game: Game): void {
+  // 1. Group idle villagers by their home's entry tile node
+  const idleMap = new Map<string, Villager[]>();
+  for (const v of game.villagers) {
+    if (v.task !== 'idle') continue;
+
+    const home = game.houses.find((h) => h.id === v.homeHouseId);
+    if (!home) continue;
+
+    // Only consider villagers whose homes match the farm's animal type
+    // This is a requirement from the existing logic
+    const key = toKey(home.entryTile.x, home.entryTile.y);
+    const list = idleMap.get(key) || [];
+    list.push(v);
+    idleMap.set(key, list);
+  }
+
+  // Build adjacency map for BFS (reuse this for all farms)
+  const adj = new Map<string, Array<{ x: number; y: number }>>();
+  for (const edge of game.paths) {
+    const ka = toKey(edge.a.x, edge.a.y);
+    const kb = toKey(edge.b.x, edge.b.y);
+
+    const na = adj.get(ka) || [];
+    na.push(edge.b);
+    adj.set(ka, na);
+
+    const nb = adj.get(kb) || [];
+    nb.push(edge.a);
+    adj.set(kb, nb);
+  }
+
   for (const farm of game.farms) {
     const requiredWorkers = farm.numIssues;
+    const currentAssigned = farm.assignedVillagerIds.length;
+    if (currentAssigned >= requiredWorkers) continue;
 
-    while (farm.assignedVillagerIds.length < requiredWorkers) {
-      const candidates = game.villagers.filter(
-        (v) => v.task === 'idle' && v.destinationType === farm.destination
-      );
-      if (!candidates.length) break;
+    let needed = requiredWorkers - currentAssigned;
+    const farmEntry = farm.entryTile;
+    const farmEntryKey = toKey(farmEntry.x, farmEntry.y);
 
-      // Heuristic: identify candidate homes closest to the farm
-      const farmCenterX = farm.x + farm.width / 2;
-      const farmCenterY = farm.y + farm.height / 2;
+    // 2. BFS from farm entry to find nearest idle villagers
+    const queue: Array<{
+      pos: { x: number; y: number };
+      path: Array<{ x: number; y: number }>;
+    }> = [{ pos: farmEntry, path: [farmEntry] }];
+    const visited = new Set<string>([farmEntryKey]);
 
-      const scoredCandidates = candidates
-        .map((v) => {
-          const home = game.houses.find((y) => y.id === v.homeHouseId);
-          if (!home) return { v, d2: Infinity };
-          const dx = farmCenterX - home.x;
-          const dy = farmCenterY - home.y;
-          return { v, d2: dx * dx + dy * dy };
-        })
-        .filter((c) => c.d2 !== Infinity)
-        .sort((a, b) => a.d2 - b.d2);
+    while (queue.length > 0 && needed > 0) {
+      const current = queue.shift()!;
+      const currentKey = toKey(current.pos.x, current.pos.y);
 
-      let foundAny = false;
-      // Try top candidates to avoid deep search on giant populations
-      for (let i = 0; i < Math.min(scoredCandidates.length, 5); i++) {
-        const candidate = scoredCandidates[i].v;
-        const home = game.houses.find((y) => y.id === candidate.homeHouseId)!;
+      // Check if any idle villagers are at this node
+      const candidates = idleMap.get(currentKey);
+      if (candidates) {
+        // Filter by destination type (e.g. ox, goat)
+        const matched = candidates.filter(
+          (v) => v.destinationType === farm.destination
+        );
 
-        // Try points in the farm
-        const points = farmPoints(farm);
-        for (const point of points) {
-          const route = findPathOnNetwork(
-            game.paths,
-            { x: Math.round(home.x), y: Math.round(home.y) },
-            { x: point.x, y: point.y }
-          );
+        while (matched.length > 0 && needed > 0) {
+          const v = matched.shift()!;
+          // Remove from index so they aren't assigned twice in this frame
+          const list = idleMap.get(currentKey)!;
+          const idx = list.indexOf(v);
+          if (idx !== -1) list.splice(idx, 1);
 
-          if (route.length) {
-            candidate.task = 'toFarm';
-            candidate.target = route.at(-1) ?? { x: point.x, y: point.y };
-            candidate.path = route;
-            candidate.lastReachedPos = { x: candidate.x, y: candidate.y };
-            candidate.originalRouteLength = route.length;
-            candidate.assignedFarmId = farm.id;
-            farm.assignedVillagerIds.push(candidate.id);
-            foundAny = true;
-            break;
-          }
+          // Assign task
+          v.task = 'toFarm';
+          v.target = { x: farmEntry.x, y: farmEntry.y };
+          // The BFS path is from farm -> home, we need home -> farm
+          v.path = [...current.path].reverse();
+          v.lastReachedPos = { x: v.x, y: v.y };
+          v.originalRouteLength = v.path.length;
+          v.assignedFarmId = farm.id;
+          farm.assignedVillagerIds.push(v.id);
+          needed--;
         }
-        if (foundAny) break;
       }
 
-      if (!foundAny) break;
+      // Add neighbors to queue
+      const neighbors = adj.get(currentKey) || [];
+      for (const next of neighbors) {
+        const nKey = toKey(next.x, next.y);
+        if (!visited.has(nKey)) {
+          visited.add(nKey);
+          queue.push({
+            pos: next,
+            path: [...current.path, next]
+          });
+        }
+      }
     }
   }
-}
-
-function farmPoints(farm: Building): Array<{ x: number; y: number }> {
-  const points: Array<{ x: number; y: number }> = [];
-  for (let x = 0; x < farm.width; x += 1) {
-    for (let y = 0; y < farm.height; y += 1) {
-      points.push({ x: farm.x + x, y: farm.y + y });
-    }
-  }
-  return points;
 }
 
 function unassignFromFarm(

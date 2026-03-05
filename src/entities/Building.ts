@@ -19,6 +19,7 @@ export class Building extends LJS.EngineObject implements Entity {
   numIssues: number = 0; // This will now represent active demand pins
   assignedVillagerIds: string[] = [];
   readonly entrance: { x: number; y: number };
+  readonly entryTile: { x: number; y: number };
 
   // Track demand timers internally without animal objects
   private _demandTimers: number[] = [];
@@ -30,6 +31,7 @@ export class Building extends LJS.EngineObject implements Entity {
     role: StructureRole,
     destination: DestinationType,
     entrance: { x: number; y: number },
+    entryTile?: { x: number; y: number },
     needyness: number = 0,
     numAnimals: number = 0
   ) {
@@ -38,6 +40,10 @@ export class Building extends LJS.EngineObject implements Entity {
     this.role = role;
     this.destination = destination;
     this.entrance = entrance;
+    this.entryTile = entryTile || {
+      x: Math.round(this.x),
+      y: Math.round(this.y)
+    };
     this.width = size.x;
     this.height = size.y;
     this.needyness = needyness;
