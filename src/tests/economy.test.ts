@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { Game } from '@core/Game';
 import { updateVillagers } from '@systems/taskSystem';
 
-// legacy filename kept, now validates the Tiny Yurts-style service loop
-
 describe('service loop', () => {
   it('people only leave home when path exists to matching office', () => {
     const game = new Game(1);

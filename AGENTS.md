@@ -3,7 +3,7 @@
 ## Mandatory Read Order (Every Task)
 
 1. Read `GAMEPLAY_GUARDRAILS.md` before planning or editing.
-2. Treat that file as the source of truth for Tiny Yurts gameplay behavior.
+2. Treat that file as the source of truth for gameplay behavior.
 3. If a requested change conflicts with guardrails, stop and ask the user before proceeding.
 
 ## Non-Negotiable Rule

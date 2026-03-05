@@ -75,8 +75,6 @@ export interface VillagerSnapshot {
   originalRouteLength: number;
   lastReachedPos: { x: number; y: number } | null;
   waitTimer: number;
-  // Backward compatibility with old save formats
-  homeYurtId?: string;
 }
 
 export interface Snapshot {
@@ -133,9 +131,7 @@ export class Game {
     const isCompatibleSave = Boolean(
       loaded &&
       Array.isArray(loaded.buildings) &&
-      loaded.buildings.every(
-        (b) => (b.role as string) === 'yurt' || b.role === 'house' || b.role === 'office'
-      )
+      loaded.buildings.every((b) => b.role === 'house' || b.role === 'office')
     );
 
     if (loaded && isCompatibleSave) {
@@ -370,7 +366,7 @@ export class Game {
         pos,
         LJS.vec2(width, height),
         b.id,
-        (b.role as string) === 'yurt' ? 'house' : b.role,
+        b.role,
         b.destination,
         b.entrance || { x: Math.round(pos.x), y: Math.round(pos.y) + 1 }, // Fallback
         b.entryTile || { x: Math.round(pos.x), y: Math.round(pos.y) }, // Fallback
@@ -411,7 +407,7 @@ export class Game {
         pos = LJS.vec2(0, 0);
       }
 
-      const homeId = v.homeHouseId || v.homeYurtId || vid;
+      const homeId = v.homeHouseId || vid;
       const villager = new Villager(pos, vid, homeId, v.destinationType);
       villager.task = v.task;
       villager.path = [...(v.path ?? [])];

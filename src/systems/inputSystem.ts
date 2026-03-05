@@ -62,7 +62,7 @@ function tryAddEdge(
 }
 
 /**
- * Tiny Yurts threshold logic for path dragging.
+ * Threshold logic for path dragging.
  * Returns true if the pointer has moved far enough into an adjacent cell to trigger placement.
  */
 function isPastPlacementThreshold(

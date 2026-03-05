@@ -1,4 +1,4 @@
-# Tiny Yurts Gameplay Guardrails
+# Mini Motorways Gameplay Guardrails
 
 Purpose: prevent AI edits from breaking core gameplay behavior.
 

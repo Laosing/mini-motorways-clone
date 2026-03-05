@@ -1,5 +1,5 @@
 export const FIXED_TIMESTEP = 1 / 60;
-export const SAVE_KEY = 'tiny-yurts-v0.1-save';
+export const SAVE_KEY = 'minimotorways-v0.1-save';
 
 export const GAME_CONFIG = {
   mapWidth: 40,

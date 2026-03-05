@@ -1,7 +1,7 @@
 import * as LJS from 'littlejsengine';
 import type { Entity } from './Entity';
 import type { DestinationType } from './Building';
-import { COLORS, COLOR_RESOURCES } from '@core/colors';
+import { COLOR_RESOURCES } from '@core/colors';
 
 export type VillagerTask = 'idle' | 'toOffice' | 'atOffice' | 'toHome';
 
