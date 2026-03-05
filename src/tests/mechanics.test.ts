@@ -77,11 +77,11 @@ describe('Game Mechanics & Persistence', () => {
     const farm = game.addTestBuilding(5, 5, 'farm', 'ox', 3, 2);
     farm.forceTestDemand(true);
 
-    expect(farm.numIssues).toBe(farm.animals?.length);
+    expect(farm.numIssues).toBe(farm.numAnimals);
     expect(farm.demand).toBeGreaterThan(0);
 
     // Simulate resolution
     game.consumeFarmIssue(farm);
-    expect(farm.numIssues).toBe((farm.animals?.length ?? 0) - 1);
+    expect(farm.numIssues).toBe(farm.numAnimals - 1);
   });
 });

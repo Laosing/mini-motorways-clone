@@ -9,8 +9,7 @@ import { applyCamera, type Camera } from '@world/camera';
 import {
   Building,
   type StructureRole,
-  type DestinationType,
-  type FarmAnimalState
+  type DestinationType
 } from '@entities/Building';
 import { Villager } from '@entities/Villager';
 import { type Entity, makeId, primeIdCounterFromIds } from '@entities/Entity';
@@ -20,7 +19,6 @@ import { updateVillagers } from '@systems/taskSystem';
 import { loadSnapshot, saveNow } from '@systems/saveSystem';
 import { setupHUD, updateHUD } from '@ui/hud';
 import type { PathEdge } from '@systems/pathNetwork';
-import { FarmAnimal } from '@entities/Animal';
 
 const SPAWNING_LOOP_LENGTH = 600;
 const TYPES: DestinationType[] = ['ox', 'goat', 'fish'];
@@ -61,6 +59,7 @@ export class Game {
   statusText = '';
   cursorTile: { x: number; y: number } | null = null;
   dragStartTile: { x: number; y: number } | null = null;
+  pathPreview: PathEdge[] = [];
   servedTrips = 0;
   updateCount = 0;
   private updateRandomness1 = 0;
@@ -69,7 +68,6 @@ export class Game {
   private updateRandomness4 = 0;
   private houseFailed = false;
   autoSpawningEnabled = true;
-  private animalMap = new Map<string, FarmAnimal>();
 
   constructor(seed = Date.now() >>> 0) {
     this.rng = new SeededRng(seed);
@@ -148,43 +146,7 @@ export class Game {
       this.day += 1;
     }
 
-    this.syncAnimalGameObjects();
-
     updateHUD(this);
-  }
-
-  private activeIdsBuffer = new Set<string>();
-
-  private syncAnimalGameObjects() {
-    this.activeIdsBuffer.clear();
-
-    for (let i = 0; i < this.buildings.length; i++) {
-      const building = this.buildings[i];
-      const states = building.animals ?? [];
-      for (let j = 0; j < states.length; j++) {
-        const state = states[j];
-        this.activeIdsBuffer.add(state.id);
-        let animal = this.animalMap.get(state.id);
-        if (!animal) {
-          const padding = 2.5;
-          const initialX =
-            this.rng.next() * (building.width * 8 - padding * 2) + padding;
-          const initialY =
-            this.rng.next() * (building.height * 8 - padding * 2) + padding;
-          animal = new FarmAnimal(building, state.id, initialX, initialY);
-          this.animalMap.set(state.id, animal);
-        }
-        animal.hasDemand = state.hasDemand;
-      }
-    }
-
-    // Cleanup stale animals
-    for (const [id, animal] of this.animalMap.entries()) {
-      if (!this.activeIdsBuffer.has(id)) {
-        animal.destroy();
-        this.animalMap.delete(id);
-      }
-    }
   }
 
   render(): void {
@@ -206,30 +168,29 @@ export class Game {
   }
 
   get animalCount(): number {
-    return this.animalMap.size;
+    let count = 0;
+    for (const farm of this.farms) count += farm.numIssues;
+    return count;
   }
 
   get oxenCount(): number {
     let count = 0;
-    for (const animal of this.animalMap.values()) {
-      if (animal.kind === 'ox') count++;
-    }
+    for (const farm of this.farms.filter((f) => f.destination === 'ox'))
+      count += farm.numIssues;
     return count;
   }
 
   get sheepCount(): number {
     let count = 0;
-    for (const animal of this.animalMap.values()) {
-      if (animal.kind === 'goat') count++;
-    }
+    for (const farm of this.farms.filter((f) => f.destination === 'goat'))
+      count += farm.numIssues;
     return count;
   }
 
   get fishCount(): number {
     let count = 0;
-    for (const animal of this.animalMap.values()) {
-      if (animal.kind === 'fish') count++;
-    }
+    for (const farm of this.farms.filter((f) => f.destination === 'fish'))
+      count += farm.numIssues;
     return count;
   }
 
@@ -242,12 +203,14 @@ export class Game {
     width = 1,
     height = 1
   ): Building {
+    const entrance = { x, y: y + 1 }; // Default for test
     const building = new Building(
       LJS.vec2(x + (width - 1) / 2, y + (height - 1) / 2),
       LJS.vec2(width, height),
       makeId(role),
       role,
-      type
+      type,
+      entrance
     );
     this.buildings.push(building);
     this.setStructureOccupancy(building, building.id);
@@ -255,7 +218,7 @@ export class Game {
       const cfg = this.farmConfig(type);
       building.needyness = cfg.needyness;
       building.numAnimals = cfg.numAnimals;
-      this.ensureFarmAnimals(building);
+      this.ensureFarmDemand(building);
     }
     return building;
   }
@@ -289,7 +252,8 @@ export class Game {
         pos: { x: b.pos.x, y: b.pos.y },
         size: { x: b.size.x, y: b.size.y },
         assignedVillagerIds: [...b.assignedVillagerIds],
-        animals: b.animals?.map((a) => ({ ...a })),
+        entrance: { ...b.entrance },
+        demandTimers: [...(b.demandTimers ?? [])],
         active: b.active,
         demand: b.demand,
         numIssues: b.numIssues,
@@ -357,11 +321,16 @@ export class Game {
         b.id,
         b.role === 'yurt' ? 'house' : b.role,
         b.destination,
+        b.entrance || { x: Math.round(pos.x), y: Math.round(pos.y) + 1 }, // Fallback for old saves
         b.needyness,
         b.numAnimals
       );
       building.assignedVillagerIds = [...(b.assignedVillagerIds ?? [])];
-      building.animals = b.animals?.map((a: any) => ({ ...a }));
+      building.demandTimers = b.demandTimers
+        ? [...b.demandTimers]
+        : b.animals
+          ? b.animals.map((anim: any) => anim.demandTimer)
+          : [];
       building.active = b.active ?? true;
       building.demand = b.demand ?? 0;
       building.numIssues = b.numIssues ?? 0;
@@ -418,19 +387,18 @@ export class Game {
 
   public updateFarmDemand(dt: number): void {
     for (const farm of this.farms) {
-      this.ensureFarmAnimals(farm);
-      for (const animal of farm.animals ?? []) {
-        if (animal.hasDemand) continue;
-        const nextTimer = animal.demandTimer - dt;
-        if (nextTimer <= 0) {
-          animal.hasDemand = true;
-          animal.demandTimer = 0;
+      this.ensureFarmDemand(farm);
+      let activeIssues = 0;
+      for (let i = 0; i < farm.demandTimers.length; i++) {
+        if (farm.demandTimers[i] <= 0) {
+          activeIssues++;
         } else {
-          animal.demandTimer = nextTimer;
+          farm.demandTimers[i] -= dt;
+          if (farm.demandTimers[i] < 0) farm.demandTimers[i] = 0;
+          if (farm.demandTimers[i] === 0) activeIssues++;
         }
       }
-      farm.numAnimals = (farm.animals ?? []).length;
-      farm.numIssues = (farm.animals ?? []).filter((a) => a.hasDemand).length;
+      farm.numIssues = activeIssues;
       farm.demand = farm.numIssues * farm.needyness;
       farm.assignedVillagerIds = farm.assignedVillagerIds.filter((id) =>
         this.villagers.some((v) => v.id === id)
@@ -439,15 +407,14 @@ export class Game {
   }
 
   consumeFarmIssue(farm: Building): boolean {
-    this.ensureFarmAnimals(farm);
-    const animals = farm.animals ?? [];
-    for (const animal of animals) {
-      if (!animal.hasDemand) continue;
-      animal.hasDemand = false;
-      animal.demandTimer = this.nextAnimalDemandTimerSeconds(farm);
-      farm.numIssues = animals.filter((a) => a.hasDemand).length;
-      farm.demand = farm.numIssues * farm.needyness;
-      return true;
+    this.ensureFarmDemand(farm);
+    for (let i = 0; i < farm.demandTimers.length; i++) {
+      if (farm.demandTimers[i] === 0) {
+        farm.demandTimers[i] = this.nextAnimalDemandTimerSeconds(farm);
+        farm.numIssues = farm.demandTimers.filter((t) => t === 0).length;
+        farm.demand = farm.numIssues * farm.needyness;
+        return true;
+      }
     }
     farm.numIssues = 0;
     farm.demand = 0;
@@ -577,6 +544,30 @@ export class Game {
     if (!pos) return false;
 
     const cfg = this.farmConfig(destination);
+
+    // Pick a random valid entrance neighbor
+    const allNeighbors: Array<{ x: number; y: number }> = [];
+    // Orthogonal neighbors for a multi-tile farm:
+    // Top and Bottom edges
+    for (let ox = 0; ox < farmProps.width; ox++) {
+      allNeighbors.push({ x: pos.x + ox, y: pos.y - 1 }); // Top
+      allNeighbors.push({ x: pos.x + ox, y: pos.y + farmProps.height }); // Bottom
+    }
+    // Left and Right edges
+    for (let oy = 0; oy < farmProps.height; oy++) {
+      allNeighbors.push({ x: pos.x - 1, y: pos.y + oy }); // Left
+      allNeighbors.push({ x: pos.x + farmProps.width, y: pos.y + oy }); // Right
+    }
+
+    const validEntrances = allNeighbors.filter(
+      (n) =>
+        this.grid.isInside(n.x, n.y) && !this.grid.get(n.x, n.y)?.occupantId
+    );
+    const entrance =
+      validEntrances.length > 0
+        ? validEntrances[this.rng.int(0, validEntrances.length)]
+        : { x: pos.x, y: pos.y - 1 };
+
     const farm = new Building(
       LJS.vec2(
         pos.x + (farmProps.width - 1) / 2,
@@ -586,12 +577,26 @@ export class Game {
       makeId('farm'),
       'farm',
       destination,
+      entrance,
       cfg.needyness,
       cfg.numAnimals
     );
-    this.ensureFarmAnimals(farm);
+    this.ensureFarmDemand(farm);
     this.buildings.push(farm);
     this.setStructureOccupancy(farm, farm.id);
+
+    // Add exactly one starter path segment from the farm to its entrance
+    // Find the tile inside the farm that is closest to the entrance tile
+    const insideX = Math.max(
+      pos.x,
+      Math.min(pos.x + farmProps.width - 1, entrance.x)
+    );
+    const insideY = Math.max(
+      pos.y,
+      Math.min(pos.y + farmProps.height - 1, entrance.y)
+    );
+    this.paths.push({ a: { x: insideX, y: insideY }, b: entrance });
+
     return true;
   }
 
@@ -608,18 +613,18 @@ export class Game {
     if (farm.destination === 'ox') {
       if (farm.numAnimals >= 5) return false;
       farm.numAnimals += 2;
-      this.ensureFarmAnimals(farm);
+      this.ensureFarmDemand(farm);
       return true;
     }
     if (farm.destination === 'goat') {
       if (farm.numAnimals >= 7) return false;
       farm.numAnimals += 1;
-      this.ensureFarmAnimals(farm);
+      this.ensureFarmDemand(farm);
       return true;
     }
     if (farm.numAnimals >= 9) return false;
     farm.numAnimals += 4;
-    this.ensureFarmAnimals(farm);
+    this.ensureFarmDemand(farm);
     return true;
   }
 
@@ -664,15 +669,35 @@ export class Game {
     y: number,
     destination: DestinationType
   ): void {
+    // Pick random orthogonal entrance for 1x1 house
+    const neighbors = [
+      { x: x + 1, y: y },
+      { x: x - 1, y: y },
+      { x: x, y: y + 1 },
+      { x: x, y: y - 1 }
+    ];
+    const validEntrances = neighbors.filter(
+      (n) =>
+        this.grid.isInside(n.x, n.y) && !this.grid.get(n.x, n.y)?.occupantId
+    );
+    const entrance =
+      validEntrances.length > 0
+        ? validEntrances[this.rng.int(0, validEntrances.length)]
+        : { x: x, y: y + 1 };
+
     const house = new Building(
       LJS.vec2(x, y),
       LJS.vec2(1, 1),
       makeId('house'),
       'house',
-      destination
+      destination,
+      entrance
     );
     this.buildings.push(house);
     this.setStructureOccupancy(house, house.id);
+
+    // Add a starter path from the house to its entrance
+    this.paths.push({ a: { x, y }, b: entrance });
 
     for (let p = 0; p < 2; p += 1) {
       const varianceX = this.rng.next() * 0.5 - 0.25;
@@ -872,35 +897,27 @@ export class Game {
   private backfillFarmDemandState(): void {
     for (const structure of this.buildings) {
       if (structure.role !== 'farm') continue;
-      this.ensureFarmAnimals(structure);
-      structure.numAnimals = (structure.animals ?? []).length;
-      structure.numIssues = (structure.animals ?? []).filter(
-        (a) => a.hasDemand
+      this.ensureFarmDemand(structure);
+      structure.numAnimals = structure.demandTimers.length;
+      structure.numIssues = structure.demandTimers.filter(
+        (t) => t === 0
       ).length;
       structure.demand = structure.numIssues * structure.needyness;
     }
   }
 
-  private ensureFarmAnimals(farm: Building): void {
+  private ensureFarmDemand(farm: Building): void {
     if (farm.role !== 'farm') return;
 
-    if (!farm.animals) farm.animals = [];
+    if (!farm.demandTimers) farm.demandTimers = [];
 
-    while (farm.animals.length < farm.numAnimals) {
-      farm.animals.push(this.makeFarmAnimal(farm));
+    while (farm.demandTimers.length < farm.numAnimals) {
+      farm.demandTimers.push(this.nextAnimalDemandTimerSeconds(farm));
     }
 
-    if (farm.animals.length > farm.numAnimals) {
-      farm.animals.length = farm.numAnimals;
+    if (farm.demandTimers.length > farm.numAnimals) {
+      farm.demandTimers.length = farm.numAnimals;
     }
-  }
-
-  private makeFarmAnimal(farm: Building): FarmAnimalState {
-    return {
-      id: makeId(`animal-${farm.destination}`),
-      demandTimer: this.nextAnimalDemandTimerSeconds(farm),
-      hasDemand: false
-    };
   }
 
   private nextAnimalDemandTimerSeconds(farm: Building): number {

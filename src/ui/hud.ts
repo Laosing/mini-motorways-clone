@@ -71,13 +71,18 @@ export function updateHUD(game: Game): void {
     .reduce((acc, f) => acc + (f.demand ?? 0), 0);
 
   hudEl.innerHTML = `
-    <strong>Kingdom Stats</strong><br>
-    State: ${game.state.state}<br>
-    Day: ${game.day}<br>
-    Trips Served: ${game.servedTrips}<br>
-    Houses: ${game.houses.length} | People: ${game.villagers.length}<br>
-    Oxen: ${game.oxenCount} | Sheep: ${game.sheepCount} | Fish: ${game.fishCount}<br>
-    Demand - Ox:${oxDemand} Sheep:${goatDemand} Fish:${fishDemand}
+    <div style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #111;">Kingdom Management</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+      <span>Day: <strong>${game.day}</strong></span>
+      <span>Trips: <strong>${game.servedTrips}</strong></span>
+      <span>Houses: <strong>${game.houses.length}</strong></span>
+      <span>People: <strong>${game.villagers.length}</strong></span>
+    </div>
+    <div style="margin-top: 10px; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.05);">
+      <span style="color: #F15B5B;">Red: ${game.oxenCount}</span> | 
+      <span style="color: #4DA1FF;">Blue: ${game.sheepCount}</span> | 
+      <span style="color: #C09500;">Yellow: ${game.fishCount}</span>
+    </div>
   `;
 
   const pauseBtn = document.getElementById('btn-pause');

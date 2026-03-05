@@ -5,12 +5,6 @@ import { COLORS, COLOR_RESOURCES } from '@core/colors';
 export type DestinationType = 'ox' | 'goat' | 'fish';
 export type StructureRole = 'house' | 'farm';
 
-export interface FarmAnimalState {
-  id: string;
-  demandTimer: number;
-  hasDemand: boolean;
-}
-
 export class Building extends LJS.EngineObject implements Entity {
   readonly id: string;
   readonly type = 'building';
@@ -22,9 +16,12 @@ export class Building extends LJS.EngineObject implements Entity {
   demand: number = 0;
   needyness: number = 0;
   numAnimals: number = 0;
-  numIssues: number = 0;
+  numIssues: number = 0; // This will now represent active demand pins
   assignedVillagerIds: string[] = [];
-  animals?: FarmAnimalState[] = [];
+  readonly entrance: { x: number; y: number };
+
+  // Track demand timers internally without animal objects
+  private _demandTimers: number[] = [];
 
   constructor(
     pos: LJS.Vector2,
@@ -32,6 +29,7 @@ export class Building extends LJS.EngineObject implements Entity {
     id: string,
     role: StructureRole,
     destination: DestinationType,
+    entrance: { x: number; y: number },
     needyness: number = 0,
     numAnimals: number = 0
   ) {
@@ -39,11 +37,24 @@ export class Building extends LJS.EngineObject implements Entity {
     this.id = id;
     this.role = role;
     this.destination = destination;
+    this.entrance = entrance;
     this.width = size.x;
     this.height = size.y;
     this.needyness = needyness;
     this.numAnimals = numAnimals;
     this.renderOrder = 5; // Above terrain, below villagers
+
+    // Initialize timers for potential demand "slots"
+    for (let i = 0; i < numAnimals; i++) {
+      this._demandTimers.push(Math.random() * 10 + 5);
+    }
+  }
+
+  get demandTimers() {
+    return this._demandTimers;
+  }
+  set demandTimers(val: number[]) {
+    this._demandTimers = val;
   }
 
   // Compatibility getters/setters
@@ -66,6 +77,7 @@ export class Building extends LJS.EngineObject implements Entity {
     } else {
       this.renderFarm();
     }
+    this.renderDemandPins();
   }
 
   private static _cachedHousePoints: LJS.Vector2[] = [];
@@ -75,32 +87,31 @@ export class Building extends LJS.EngineObject implements Entity {
   private renderHouse() {
     const destColor = this.getDestinationColor();
 
-    // Smoother circle (The border) - Cache points
     if (Building._cachedHousePoints.length === 0) {
       const segments = 32;
       for (let i = 0; i < segments; i++) {
         Building._cachedHousePoints.push(
-          LJS.vec2(0, 0.28).rotate(i * ((Math.PI * 2) / segments))
+          LJS.vec2(0, 0.35).rotate(i * ((Math.PI * 2) / segments))
         );
       }
     }
+    // Solid fill with consistent border
     LJS.drawPoly(
       Building._cachedHousePoints,
-      COLOR_RESOURCES.transparent,
-      0.15,
       destColor,
+      COLORS.outlineWidth,
+      COLOR_RESOURCES.white,
       this.pos
     );
   }
 
   private renderFarm() {
     const destColor = this.getDestinationColor();
-    const padding = 0.2;
-    const r = 0.4; // Corner radius
+    const padding = 0.15;
+    const r = 0.3;
     const w = this.size.x - padding;
     const h = this.size.y - padding;
 
-    // Only regenerate if size changed
     if (
       this._cachedFarmPoints.length === 0 ||
       this._lastRenderSize.x !== this.size.x ||
@@ -134,11 +145,32 @@ export class Building extends LJS.EngineObject implements Entity {
 
     LJS.drawPoly(
       this._cachedFarmPoints,
-      COLOR_RESOURCES.transparent,
-      0.15,
-      destColor,
+      destColor, // Solid fill
+      COLORS.outlineWidth,
+      COLOR_RESOURCES.white,
       this.pos
     );
+  }
+
+  private renderDemandPins() {
+    if (this.numIssues <= 0) return;
+
+    const color = COLOR_RESOURCES.black; // Demand pins are dark in MM
+    const pinSize = 0.1;
+    const spacing = 0.22;
+    const pinsPerRow = Math.floor((this.width - 0.3) / spacing);
+
+    for (let i = 0; i < this.numIssues; i++) {
+      const row = Math.floor(i / pinsPerRow);
+      const col = i % pinsPerRow;
+
+      const offsetX =
+        (col - (Math.min(this.numIssues, pinsPerRow) - 1) / 2) * spacing;
+      const offsetY =
+        (row - Math.floor((this.numIssues - 1) / pinsPerRow) / 2) * spacing;
+
+      LJS.drawCircle(this.pos.add(LJS.vec2(offsetX, offsetY)), pinSize, color);
+    }
   }
 
   private getDestinationColor() {
@@ -150,14 +182,15 @@ export class Building extends LJS.EngineObject implements Entity {
           ? COLOR_RESOURCES.fish
           : COLOR_RESOURCES.ui;
   }
-  /** Test Helper: Manually set demand state for all animals in this building */
+
   public forceTestDemand(hasDemand: boolean): void {
-    if (!this.animals) return;
-    for (const animal of this.animals) {
-      animal.hasDemand = hasDemand;
-      if (!hasDemand) animal.demandTimer = 10; // reset timer
+    if (hasDemand) {
+      this.numIssues = this.numAnimals;
+      this._demandTimers = this._demandTimers.map(() => 0);
+    } else {
+      this.numIssues = 0;
+      this._demandTimers = this._demandTimers.map(() => 10);
     }
-    this.numIssues = hasDemand ? this.animals.length : 0;
     this.demand = this.numIssues * this.needyness;
   }
 }

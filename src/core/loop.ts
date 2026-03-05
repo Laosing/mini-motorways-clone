@@ -1,4 +1,5 @@
 import * as LJS from 'littlejsengine';
+import { COLORS } from './colors';
 import { FIXED_TIMESTEP } from './config';
 import type { Game } from './Game';
 
@@ -8,7 +9,7 @@ export function wireEngine(game: Game): void {
   function gameInit(): void {
     LJS.setShowSplashScreen(false);
     LJS.setCanvasPixelated(false);
-    LJS.setCanvasClearColor(new LJS.Color().setHex('#8a5')); // COLORS.grass
+    LJS.setCanvasClearColor(new LJS.Color().setHex(COLORS.grass));
     game.init();
   }
 

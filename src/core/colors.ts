@@ -1,19 +1,20 @@
 import * as LJS from 'littlejsengine';
 
 export const COLORS = {
-  grass: '#8a5',
-  path: '#dca',
-  house: '#fff',
-  ox: '#b75',
-  goat: '#abb',
-  fish: '#f80',
-  oxHorn: '#dee',
-  black: '#000',
-  ui: '#443',
-  red: '#e31',
-  grid: '#0001',
-  shade: '#0003',
-  shade2: '#0005'
+  grass: '#E8E7D1',
+  path: '#333333',
+  house: '#FFFFFF',
+  ox: '#F15B5B', // Vibrant Pastel Red
+  goat: '#4DA1FF', // Vibrant Pastel Blue
+  fish: '#FFD93D', // Vibrant Pastel Yellow
+  oxHorn: '#FFFFFF',
+  black: '#1A1A1A',
+  ui: '#333333',
+  red: '#F15B5B',
+  grid: '#0000000D', // 0.05 alpha
+  shade: '#00000026', // 0.15 alpha
+  shade2: '#00000040', // 0.25 alpha
+  outlineWidth: 0.12
 } as const;
 
 // Cached Color objects to avoid garbage collection pressure
@@ -28,10 +29,10 @@ export const COLOR_RESOURCES = {
   black: new LJS.Color().setHex(COLORS.black),
   ui: new LJS.Color().setHex(COLORS.ui),
   red: new LJS.Color().setHex(COLORS.red),
-  grid: new LJS.Color(0, 0, 0, 0.1),
-  shadow: new LJS.Color(0, 0, 0, 0.2),
+  grid: new LJS.Color(0, 0, 0, 0.05),
+  shadow: new LJS.Color(0, 0, 0, 0.15),
   transparent: new LJS.Color(0, 0, 0, 0),
   white: new LJS.Color(1, 1, 1, 1),
-  cursorFill: new LJS.Color(1, 1, 1, 0.1),
-  cursorStroke: new LJS.Color(1, 1, 1, 0.3)
+  cursorFill: new LJS.Color(0, 0, 0, 0.05),
+  cursorStroke: new LJS.Color(0, 0, 0, 0.2)
 } as const;

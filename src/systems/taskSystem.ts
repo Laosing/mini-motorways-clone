@@ -218,8 +218,11 @@ function getNearbyVillagers(
 }
 
 const _nearbyBuffer: Villager[] = [];
+const _activeOthersBuffer: Villager[] = [];
 
 function applyVillagerCrowdAvoidance(game: Game, villager: Villager): void {
+  // If we've been stuck for several seconds, phase through others to resolve the jam
+  if (villager.stuckTimer > 4.0) return;
   getNearbyVillagers(
     game,
     villager.x,
@@ -338,8 +341,19 @@ function sanitizeVillagerPosition(game: Game, villager: Villager): void {
 function resolveVillagerOverlaps(game: Game): void {
   for (let i = 0; i < game.villagers.length; i++) {
     const a = game.villagers[i];
+    // Don't apply hard collisions to ghosting villagers
+    if (a.stuckTimer > 4.0) continue;
+
     getNearbyVillagers(game, a.x, a.y, VILLAGER_DIAMETER, _nearbyBuffer);
-    resolveBodyOverlapsSingle(a, _nearbyBuffer, VILLAGER_DIAMETER);
+
+    // Also filter others in the buffer that are ghosting to avoid pushing them
+    _activeOthersBuffer.length = 0;
+    for (let j = 0; j < _nearbyBuffer.length; j++) {
+      if (_nearbyBuffer[j].stuckTimer <= 4.0) {
+        _activeOthersBuffer.push(_nearbyBuffer[j]);
+      }
+    }
+    resolveBodyOverlapsSingle(a, _activeOthersBuffer, VILLAGER_DIAMETER);
   }
 }
 
@@ -378,22 +392,30 @@ export function updateVillagers(game: Game, dt: number): void {
       }
 
       if (villager.stuckTimer > 2.0) {
-        // We've been practically stationary for 2 seconds while on a task
-        // Attempt to "unjam" by nudging toward the target or resetting to the last valid node
+        // STATIONARY for 2s: Disable fine-grained avoidance to allow better steering
         if (villager.path.length > 0) {
           const node = villager.path[0];
-          // Teleport slightly toward node or just nudge hard
           const nx = node.x - villager.x;
           const ny = node.y - villager.y;
           const mag = Math.sqrt(nx * nx + ny * ny);
+
           if (mag > 0.001) {
-            villager.x += (nx / mag) * 0.1;
-            villager.y += (ny / mag) * 0.1;
+            // Strong nudge toward target node
+            villager.dx += (nx / mag) * 0.05 * dt;
+            villager.dy += (ny / mag) * 0.05 * dt;
           }
-          // If still stuck after more time, just skip this node
-          if (villager.stuckTimer > 4.0) {
+
+          // STATIONARY for 8s: Teleport to the current node to bypass physical blocks
+          if (villager.stuckTimer > 8.0) {
+            villager.x = node.x;
+            villager.y = node.y;
+            villager.stuckTimer = 1.0; // Reset slightly to prevent instant double teleport
+          }
+
+          // STATIONARY for 12s: Something is fundamentally broken, skip this node
+          if (villager.stuckTimer > 12.0) {
             villager.path.shift();
-            villager.stuckTimer = 1.0;
+            villager.stuckTimer = 0;
           }
         }
       }
@@ -458,8 +480,6 @@ export function updateVillagers(game: Game, dt: number): void {
           continue;
         }
 
-        // Use the actual farm location as the path start, since we might have been pushed
-        // slightly off the path node by crowds while working.
         const startX = Math.round(villager.x);
         const startY = Math.round(villager.y);
         const backRoute = findPathOnNetwork(
@@ -475,11 +495,58 @@ export function updateVillagers(game: Game, dt: number): void {
           villager.lastReachedPos = { x: villager.x, y: villager.y };
           villager.originalRouteLength = backRoute.length;
         } else {
+          // If no path back home, they are stranded.
+          // Instead of immediate idle, we'll let the Rescue logic below handle the teleport.
           villager.task = 'idle';
           villager.target = null;
           villager.path = [];
           unassignFromFarm(game, villager.id, villager.assignedFarmId);
           villager.assignedFarmId = null;
+        }
+      }
+    }
+
+    // --- RESCUE STRANDED VILLAGERS ---
+    // If a villager is idle but NOT at their home residence, they are "lost"
+    if (villager.task === 'idle') {
+      const home = game.houses.find((h) => h.id === villager.homeHouseId);
+      if (home) {
+        const dx = villager.x - home.x;
+        const dy = villager.y - home.y;
+        const distSq = dx * dx + dy * dy;
+
+        // If more than 0.5 units from home tile
+        if (distSq > 0.25) {
+          villager.stuckTimer += dt;
+
+          // Every 2 seconds, try to find a path home
+          if (
+            Math.floor(villager.stuckTimer) % 2 === 0 &&
+            villager.stuckTimer > 1.0
+          ) {
+            const route = findPathOnNetwork(
+              game.paths,
+              { x: Math.round(villager.x), y: Math.round(villager.y) },
+              { x: home.x, y: home.y }
+            );
+            if (route.length) {
+              villager.task = 'toHome';
+              villager.target = { x: home.x, y: home.y };
+              villager.path = route;
+              villager.stuckTimer = 0;
+            }
+          }
+
+          // If stranded for 5+ seconds without a path, just teleport home
+          if (villager.stuckTimer > 5.0) {
+            villager.x = home.x;
+            villager.y = home.y;
+            villager.dx = 0;
+            villager.dy = 0;
+            villager.stuckTimer = 0;
+          }
+        } else {
+          villager.stuckTimer = 0;
         }
       }
     }
