@@ -75,8 +75,8 @@ function isPastPlacementThreshold(
   const ady = Math.abs(dy);
 
   // Enforce adjacency: mouse must be moving toward a neighbor
-  // Increased to 2.0 to allow for the 125% threshold
-  if (adx > 2.0 || ady > 2.0) return null;
+  // Increased significantly to handle fast mouse movements
+  if (adx > 20.0 || ady > 20.0) return null;
 
   const targetX = from.x + Math.sign(Math.round(dx || 0));
   const targetY = from.y + Math.sign(Math.round(dy || 0));
@@ -111,7 +111,7 @@ function getPotentialNeighbor(
   const adx = Math.abs(dx);
   const ady = Math.abs(dy);
 
-  if (adx > 1.5 || ady > 1.5) return null;
+  if (adx > 20.0 || ady > 20.0) return null;
 
   const targetX = from.x + Math.sign(Math.round(dx || 0));
   const targetY = from.y + Math.sign(Math.round(dy || 0));
