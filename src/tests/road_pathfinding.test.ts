@@ -1,4 +1,4 @@
-import { findPathOnNetwork, PathEdge } from './src/systems/pathNetwork';
+import { findPathOnNetwork, PathEdge } from '@systems/pathNetwork';
 import { describe, it, expect } from 'vitest';
 
 describe('findPathOnNetwork', () => {

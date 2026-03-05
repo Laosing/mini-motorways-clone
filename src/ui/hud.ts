@@ -60,14 +60,14 @@ export function setupBuildMenu(_game: Game): void {}
 
 export function updateHUD(game: Game): void {
   if (!hudEl) return;
-  const oxDemand = game.farms
-    .filter((f) => f.destination === 'ox')
+  const redDemand = game.farms
+    .filter((f) => f.destination === 'red')
     .reduce((acc, f) => acc + (f.demand ?? 0), 0);
-  const goatDemand = game.farms
-    .filter((f) => f.destination === 'goat')
+  const blueDemand = game.farms
+    .filter((f) => f.destination === 'blue')
     .reduce((acc, f) => acc + (f.demand ?? 0), 0);
-  const fishDemand = game.farms
-    .filter((f) => f.destination === 'fish')
+  const yellowDemand = game.farms
+    .filter((f) => f.destination === 'yellow')
     .reduce((acc, f) => acc + (f.demand ?? 0), 0);
 
   hudEl.innerHTML = `
@@ -79,9 +79,9 @@ export function updateHUD(game: Game): void {
       <span>People: <strong>${game.villagers.length}</strong></span>
     </div>
     <div style="margin-top: 10px; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.05);">
-      <span style="color: #F15B5B;">Red: ${game.oxenCount}</span> | 
-      <span style="color: #4DA1FF;">Blue: ${game.sheepCount}</span> | 
-      <span style="color: #C09500;">Yellow: ${game.fishCount}</span>
+      <span style="color: #F15B5B;">Red: ${game.redCount}</span> |
+      <span style="color: #4DA1FF;">Blue: ${game.blueCount}</span> |
+      <span style="color: #FFD93D;">Yellow: ${game.yellowCount}</span>
     </div>
   `;
 

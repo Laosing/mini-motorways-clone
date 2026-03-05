@@ -4,13 +4,12 @@ export const COLORS = {
   grass: '#E8E7D1',
   path: '#333333',
   house: '#FFFFFF',
-  ox: '#F15B5B', // Vibrant Pastel Red
-  goat: '#4DA1FF', // Vibrant Pastel Blue
-  fish: '#FFD93D', // Vibrant Pastel Yellow
-  oxHorn: '#FFFFFF',
+  red: '#F15B5B', // Vibrant Pastel Red
+  blue: '#4DA1FF', // Vibrant Pastel Blue
+  yellow: '#FFD93D', // Vibrant Pastel Yellow
+  white: '#FFFFFF',
   black: '#1A1A1A',
   ui: '#333333',
-  red: '#F15B5B',
   grid: '#0000000D', // 0.05 alpha
   shade: '#00000026', // 0.15 alpha
   shade2: '#00000040', // 0.25 alpha
@@ -22,13 +21,11 @@ export const COLOR_RESOURCES = {
   grass: new LJS.Color().setHex(COLORS.grass),
   path: new LJS.Color().setHex(COLORS.path),
   house: new LJS.Color().setHex(COLORS.house),
-  ox: new LJS.Color().setHex(COLORS.ox),
-  goat: new LJS.Color().setHex(COLORS.goat),
-  fish: new LJS.Color().setHex(COLORS.fish),
-  oxHorn: new LJS.Color().setHex(COLORS.oxHorn),
+  red: new LJS.Color().setHex(COLORS.red),
+  blue: new LJS.Color().setHex(COLORS.blue),
+  yellow: new LJS.Color().setHex(COLORS.yellow),
   black: new LJS.Color().setHex(COLORS.black),
   ui: new LJS.Color().setHex(COLORS.ui),
-  red: new LJS.Color().setHex(COLORS.red),
   grid: new LJS.Color(0, 0, 0, 0.05),
   shadow: new LJS.Color(0, 0, 0, 0.15),
   transparent: new LJS.Color(0, 0, 0, 0),

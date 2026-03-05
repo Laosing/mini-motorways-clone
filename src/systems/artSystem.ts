@@ -8,9 +8,9 @@ function makeImage(svgBody: string): HTMLImageElement {
 
 const C = {
   house: '#fff',
-  ox: '#b75',
-  goat: '#abb',
-  fish: '#f80',
+  red: '#b75',
+  blue: '#abb',
+  yellow: '#f80',
   shade: '#0001',
   shade2: '#0002',
   leaf: '#ac6',
@@ -40,15 +40,15 @@ export const sprites = {
   `),
   villager: makeImage(`
     <ellipse cx='56' cy='74' rx='14' ry='8' fill='${C.shade}'/>
-    <circle cx='50' cy='36' r='8' fill='${C.ox}'/>
+    <circle cx='50' cy='36' r='8' fill='${C.red}'/>
     <path d='M42 46 Q50 43 58 46 L58 69 Q50 72 42 69 Z' fill='${C.ui}'/>
   `),
-  houseOx: makeHouse(C.ox),
-  houseGoat: makeHouse(C.goat),
-  houseFish: makeHouse(C.fish),
-  farmOx: makeFarmPin(C.ox),
-  farmGoat: makeFarmPin(C.goat),
-  farmFish: makeFarmPin(C.fish)
+  houseRed: makeHouse(C.red),
+  houseBlue: makeHouse(C.blue),
+  houseYellow: makeHouse(C.yellow),
+  farmRed: makeFarmPin(C.red),
+  farmBlue: makeFarmPin(C.blue),
+  farmYellow: makeFarmPin(C.yellow)
 };
 
 export function drawSprite(

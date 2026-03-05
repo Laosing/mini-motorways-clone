@@ -30,7 +30,7 @@ describe('Game Mechanics & Persistence', () => {
     game.init();
 
     // Use new test helpers
-    game.addTestBuilding(10, 10, 'house', 'ox');
+    game.addTestBuilding(10, 10, 'house', 'red');
     game.addTestPath(10, 10, 11, 10);
     game.day = 5;
     game.servedTrips = 42;
@@ -74,7 +74,7 @@ describe('Game Mechanics & Persistence', () => {
     game.startPlay();
 
     // Use test helpers to create a controlled environment
-    const farm = game.addTestBuilding(5, 5, 'farm', 'ox', 3, 2);
+    const farm = game.addTestBuilding(5, 5, 'farm', 'red', 3, 2);
     farm.forceTestDemand(true);
 
     expect(farm.numIssues).toBe(farm.numAnimals);

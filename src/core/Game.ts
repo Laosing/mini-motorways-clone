@@ -21,7 +21,7 @@ import { setupHUD, updateHUD } from '@ui/hud';
 import type { PathEdge } from '@systems/pathNetwork';
 
 const SPAWNING_LOOP_LENGTH = 600;
-const TYPES: DestinationType[] = ['ox', 'goat', 'fish'];
+const TYPES: DestinationType[] = ['red', 'blue', 'yellow'];
 
 interface SpawnPositionOptions {
   width?: number;
@@ -174,23 +174,23 @@ export class Game {
     return count;
   }
 
-  get oxenCount(): number {
+  get redCount(): number {
     let count = 0;
-    for (const farm of this.farms.filter((f) => f.destination === 'ox'))
+    for (const farm of this.farms.filter((f) => f.destination === 'red'))
       count += farm.numIssues;
     return count;
   }
 
-  get sheepCount(): number {
+  get blueCount(): number {
     let count = 0;
-    for (const farm of this.farms.filter((f) => f.destination === 'goat'))
+    for (const farm of this.farms.filter((f) => f.destination === 'blue'))
       count += farm.numIssues;
     return count;
   }
 
-  get fishCount(): number {
+  get yellowCount(): number {
     let count = 0;
-    for (const farm of this.farms.filter((f) => f.destination === 'fish'))
+    for (const farm of this.farms.filter((f) => f.destination === 'yellow'))
       count += farm.numIssues;
     return count;
   }
@@ -447,8 +447,8 @@ export class Game {
       if (
         !this.trySpawnFarm(
           this.updateCount > 2000 &&
-            !this.farms.some((f) => f.destination === 'fish')
-            ? 'fish'
+            !this.farms.some((f) => f.destination === 'yellow')
+            ? 'yellow'
             : this.getRandomNewType()
         )
       ) {
@@ -608,19 +608,19 @@ export class Game {
     needyness: number;
     numAnimals: number;
   } {
-    if (destination === 'ox') return { needyness: 225, numAnimals: 3 };
-    if (destination === 'goat') return { needyness: 240, numAnimals: 3 };
+    if (destination === 'red') return { needyness: 225, numAnimals: 3 };
+    if (destination === 'blue') return { needyness: 240, numAnimals: 3 };
     return { needyness: 1300, numAnimals: 5 };
   }
 
   private tryUpgradeFarm(farm: Building): boolean {
-    if (farm.destination === 'ox') {
+    if (farm.destination === 'red') {
       if (farm.numAnimals >= 5) return false;
       farm.numAnimals += 2;
       this.ensureFarmDemand(farm);
       return true;
     }
-    if (farm.destination === 'goat') {
+    if (farm.destination === 'blue') {
       if (farm.numAnimals >= 7) return false;
       farm.numAnimals += 1;
       this.ensureFarmDemand(farm);
@@ -741,10 +741,10 @@ export class Game {
   }
 
   private pickFarmForFirstHouse(): Building | null {
-    const fishFarm = this.farms.find((f) => f.destination === 'fish');
-    const fishHouses = this.houses.filter((y) => y.destination === 'fish');
+    const yellowFarm = this.farms.find((f) => f.destination === 'yellow');
+    const yellowHouses = this.houses.filter((y) => y.destination === 'yellow');
 
-    if (fishFarm && fishHouses.length < 2) return fishFarm;
+    if (yellowFarm && yellowHouses.length < 2) return yellowFarm;
     if (!this.farms.length) return null;
     if (this.farms.length > 2)
       return this.farms[this.rng.int(0, this.farms.length)];
@@ -752,7 +752,7 @@ export class Game {
   }
 
   private getRandomNewType(): DestinationType {
-    if (this.farms.length < 2) return TYPES[this.farms.length] ?? 'ox';
+    if (this.farms.length < 2) return TYPES[this.farms.length] ?? 'red';
 
     const goodTypes = TYPES.filter((t) => {
       const y = this.houses.filter((house) => house.destination === t).length;
@@ -766,7 +766,7 @@ export class Game {
 
   private getRandomExistingType(): DestinationType {
     if (this.farms.length < 2)
-      return TYPES[Math.max(0, this.farms.length - 1)] ?? 'ox';
+      return TYPES[Math.max(0, this.farms.length - 1)] ?? 'red';
 
     const scores = TYPES.map((t) => {
       const y = Math.max(
@@ -886,7 +886,7 @@ export class Game {
     width: number;
     height: number;
   } {
-    if (destination === 'fish') return { width: 2, height: 2 };
+    if (destination === 'yellow') return { width: 2, height: 2 };
     const portrait = this.rng.next() > 0.5;
     return portrait ? { width: 2, height: 3 } : { width: 3, height: 2 };
   }
@@ -927,8 +927,8 @@ export class Game {
   }
 
   private nextAnimalDemandTimerSeconds(farm: Building): number {
-    if (farm.destination === 'ox') return 12 + this.rng.next() * 10;
-    if (farm.destination === 'goat') return 9 + this.rng.next() * 8;
+    if (farm.destination === 'red') return 12 + this.rng.next() * 10;
+    if (farm.destination === 'blue') return 9 + this.rng.next() * 8;
     return 16 + this.rng.next() * 12;
   }
 }

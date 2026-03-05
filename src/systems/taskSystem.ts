@@ -289,7 +289,7 @@ function assignPeopleToFarmIssues(game: Game): void {
       // Check if any idle villagers are at this node
       const candidates = idleMap.get(currentKey);
       if (candidates) {
-        // Filter by destination type (e.g. ox, goat)
+        // Filter by destination type (e.g. red, blue)
         const matched = candidates.filter(
           (v) => v.destinationType === farm.destination
         );

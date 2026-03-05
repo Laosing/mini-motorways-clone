@@ -77,12 +77,12 @@ export class Villager extends LJS.EngineObject implements Entity {
 
   render() {
     const color =
-      this.destinationType === 'ox'
-        ? COLOR_RESOURCES.ox
-        : this.destinationType === 'goat'
-          ? COLOR_RESOURCES.goat
-          : this.destinationType === 'fish'
-            ? COLOR_RESOURCES.fish
+      this.destinationType === 'red'
+        ? COLOR_RESOURCES.red
+        : this.destinationType === 'blue'
+          ? COLOR_RESOURCES.blue
+          : this.destinationType === 'yellow'
+            ? COLOR_RESOURCES.yellow
             : COLOR_RESOURCES.ui;
 
     // Render shadow

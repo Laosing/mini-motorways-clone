@@ -2,7 +2,7 @@ import * as LJS from 'littlejsengine';
 import type { Entity } from './Entity';
 import { COLORS, COLOR_RESOURCES } from '@core/colors';
 
-export type DestinationType = 'ox' | 'goat' | 'fish';
+export type DestinationType = 'red' | 'blue' | 'yellow';
 export type StructureRole = 'house' | 'farm';
 
 export class Building extends LJS.EngineObject implements Entity {
@@ -180,12 +180,12 @@ export class Building extends LJS.EngineObject implements Entity {
   }
 
   private getDestinationColor() {
-    return this.destination === 'ox'
-      ? COLOR_RESOURCES.ox
-      : this.destination === 'goat'
-        ? COLOR_RESOURCES.goat
-        : this.destination === 'fish'
-          ? COLOR_RESOURCES.fish
+    return this.destination === 'red'
+      ? COLOR_RESOURCES.red
+      : this.destination === 'blue'
+        ? COLOR_RESOURCES.blue
+        : this.destination === 'yellow'
+          ? COLOR_RESOURCES.yellow
           : COLOR_RESOURCES.ui;
   }
 

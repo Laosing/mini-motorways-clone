@@ -23,20 +23,12 @@ describe('service loop', () => {
     const farm = game.farms.find(
       (f) => f.destination === villager.destinationType
     )!;
-    farm.animals = farm.animals ?? [];
-    if (!farm.animals.length) {
-      farm.animals.push({
-        id: 'test-animal-1',
-        demandTimer: 10,
-        hasDemand: true
-      });
+    // Set up demand using the new demandTimers system
+    if (!farm.demandTimers.length) {
+      farm.demandTimers = [0];
       farm.numAnimals = 1;
     } else {
-      farm.animals = farm.animals.map((a, i) => ({
-        ...a,
-        demandTimer: 10,
-        hasDemand: i === 0
-      }));
+      farm.demandTimers = farm.demandTimers.map((_, i) => i === 0 ? 0 : 10);
     }
     farm.numIssues = 1;
     farm.demand = farm.needyness;
