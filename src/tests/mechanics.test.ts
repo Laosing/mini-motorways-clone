@@ -74,14 +74,14 @@ describe('Game Mechanics & Persistence', () => {
     game.startPlay();
 
     // Use test helpers to create a controlled environment
-    const farm = game.addTestBuilding(5, 5, 'farm', 'red', 3, 2);
-    farm.forceTestDemand(true);
+    const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
+    office.forceTestDemand(true);
 
-    expect(farm.numIssues).toBe(farm.numAnimals);
-    expect(farm.demand).toBeGreaterThan(0);
+    expect(office.numIssues).toBe(office.numAnimals);
+    expect(office.demand).toBeGreaterThan(0);
 
     // Simulate resolution
-    game.consumeFarmIssue(farm);
-    expect(farm.numIssues).toBe(farm.numAnimals - 1);
+    game.consumeOfficeIssue(office);
+    expect(office.numIssues).toBe(office.numAnimals - 1);
   });
 });

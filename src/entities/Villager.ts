@@ -3,7 +3,7 @@ import type { Entity } from './Entity';
 import type { DestinationType } from './Building';
 import { COLORS, COLOR_RESOURCES } from '@core/colors';
 
-export type VillagerTask = 'idle' | 'toFarm' | 'atFarm' | 'toHome';
+export type VillagerTask = 'idle' | 'toOffice' | 'atOffice' | 'toHome';
 
 export class Villager extends LJS.EngineObject implements Entity {
   readonly id: string;
@@ -15,7 +15,7 @@ export class Villager extends LJS.EngineObject implements Entity {
   target: { x: number; y: number } | null = null;
   path: Array<{ x: number; y: number }> = [];
   waitTimer: number = 0;
-  assignedFarmId: string | null = null;
+  assignedOfficeId: string | null = null;
   originalRouteLength: number = 0;
   lastReachedPos: { x: number; y: number } | null = null;
   stuckTimer: number = 0;

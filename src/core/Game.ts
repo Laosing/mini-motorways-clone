@@ -87,7 +87,7 @@ export class Game {
       loaded &&
       Array.isArray(loaded.buildings) &&
       loaded.buildings.every(
-        (b) => b.role === 'yurt' || b.role === 'house' || b.role === 'farm'
+        (b) => b.role === 'yurt' || b.role === 'house' || b.role === 'office'
       )
     );
 
@@ -137,7 +137,7 @@ export class Game {
     handleInput(this);
 
     this.spawnBySchedule();
-    this.updateFarmDemand(dt);
+    this.updateOfficeDemand(dt);
     updateVillagers(this, dt);
 
     this.updateCount += 1;
@@ -160,8 +160,8 @@ export class Game {
     this.statusText = 'Saved';
   }
 
-  get farms(): Building[] {
-    return this.buildings.filter((b) => b.role === 'farm');
+  get offices(): Building[] {
+    return this.buildings.filter((b) => b.role === 'office');
   }
 
   get houses(): Building[] {
@@ -170,28 +170,28 @@ export class Game {
 
   get animalCount(): number {
     let count = 0;
-    for (const farm of this.farms) count += farm.numIssues;
+    for (const office of this.offices) count += office.numIssues;
     return count;
   }
 
   get redCount(): number {
     let count = 0;
-    for (const farm of this.farms.filter((f) => f.destination === 'red'))
-      count += farm.numIssues;
+    for (const office of this.offices.filter((f) => f.destination === 'red'))
+      count += office.numIssues;
     return count;
   }
 
   get blueCount(): number {
     let count = 0;
-    for (const farm of this.farms.filter((f) => f.destination === 'blue'))
-      count += farm.numIssues;
+    for (const office of this.offices.filter((f) => f.destination === 'blue'))
+      count += office.numIssues;
     return count;
   }
 
   get yellowCount(): number {
     let count = 0;
-    for (const farm of this.farms.filter((f) => f.destination === 'yellow'))
-      count += farm.numIssues;
+    for (const office of this.offices.filter((f) => f.destination === 'yellow'))
+      count += office.numIssues;
     return count;
   }
 
@@ -216,11 +216,11 @@ export class Game {
     );
     this.buildings.push(building);
     this.setStructureOccupancy(building, building.id);
-    if (role === 'farm') {
-      const cfg = this.farmConfig(type);
+    if (role === 'office') {
+      const cfg = this.officeConfig(type);
       building.needyness = cfg.needyness;
       building.numAnimals = cfg.numAnimals;
-      this.ensureFarmDemand(building);
+      this.ensureOfficeDemand(building);
     }
     return building;
   }
@@ -273,7 +273,7 @@ export class Game {
         destinationType: v.destinationType,
         task: v.task,
         path: [...v.path],
-        assignedFarmId: v.assignedFarmId,
+        assignedOfficeId: v.assignedOfficeId,
         dx: v.dx,
         dy: v.dy,
         rotation: v.rotation,
@@ -368,7 +368,7 @@ export class Game {
       const villager = new Villager(pos, vid, homeId, v.destinationType);
       villager.task = v.task;
       villager.path = [...(v.path ?? [])];
-      villager.assignedFarmId = v.assignedFarmId ?? null;
+      villager.assignedOfficeId = v.assignedOfficeId ?? null;
       villager.dx = v.dx ?? 0;
       villager.dy = v.dy ?? 0;
       villager.rotation = v.rotation ?? 0;
@@ -386,44 +386,44 @@ export class Game {
     this.updateCount = snapshot.updateCount ?? 0;
     this.autoSpawningEnabled = snapshot.autoSpawningEnabled ?? true;
     this.backfillStructureSizes();
-    this.backfillFarmDemandState();
+    this.backfillOfficeDemandState();
     this.rebuildOccupancyFromStructures();
     this.pathsChanged = true;
   }
 
-  public updateFarmDemand(dt: number): void {
-    for (const farm of this.farms) {
-      this.ensureFarmDemand(farm);
+  public updateOfficeDemand(dt: number): void {
+    for (const office of this.offices) {
+      this.ensureOfficeDemand(office);
       let activeIssues = 0;
-      for (let i = 0; i < farm.demandTimers.length; i++) {
-        if (farm.demandTimers[i] <= 0) {
+      for (let i = 0; i < office.demandTimers.length; i++) {
+        if (office.demandTimers[i] <= 0) {
           activeIssues++;
         } else {
-          farm.demandTimers[i] -= dt;
-          if (farm.demandTimers[i] < 0) farm.demandTimers[i] = 0;
-          if (farm.demandTimers[i] === 0) activeIssues++;
+          office.demandTimers[i] -= dt;
+          if (office.demandTimers[i] < 0) office.demandTimers[i] = 0;
+          if (office.demandTimers[i] === 0) activeIssues++;
         }
       }
-      farm.numIssues = activeIssues;
-      farm.demand = farm.numIssues * farm.needyness;
-      farm.assignedVillagerIds = farm.assignedVillagerIds.filter((id) =>
+      office.numIssues = activeIssues;
+      office.demand = office.numIssues * office.needyness;
+      office.assignedVillagerIds = office.assignedVillagerIds.filter((id) =>
         this.villagers.some((v) => v.id === id)
       );
     }
   }
 
-  consumeFarmIssue(farm: Building): boolean {
-    this.ensureFarmDemand(farm);
-    for (let i = 0; i < farm.demandTimers.length; i++) {
-      if (farm.demandTimers[i] === 0) {
-        farm.demandTimers[i] = this.nextAnimalDemandTimerSeconds(farm);
-        farm.numIssues = farm.demandTimers.filter((t) => t === 0).length;
-        farm.demand = farm.numIssues * farm.needyness;
+  consumeOfficeIssue(office: Building): boolean {
+    this.ensureOfficeDemand(office);
+    for (let i = 0; i < office.demandTimers.length; i++) {
+      if (office.demandTimers[i] === 0) {
+        office.demandTimers[i] = this.nextOfficeDemandTimerSeconds(office);
+        office.numIssues = office.demandTimers.filter((t) => t === 0).length;
+        office.demand = office.numIssues * office.needyness;
         return true;
       }
     }
-    farm.numIssues = 0;
-    farm.demand = 0;
+    office.numIssues = 0;
+    office.demand = 0;
     return false;
   }
 
@@ -442,18 +442,18 @@ export class Game {
       this.updateCount === 0 ||
       (this.updateCount > 200 &&
         this.updateCount % SPAWNING_LOOP_LENGTH ===
-          (this.farms.length ? this.updateRandomness1 : 0))
+          (this.offices.length ? this.updateRandomness1 : 0))
     ) {
       if (
-        !this.trySpawnFarm(
+        !this.trySpawnOffice(
           this.updateCount > 2000 &&
-            !this.farms.some((f) => f.destination === 'yellow')
+            !this.offices.some((f) => f.destination === 'yellow')
             ? 'yellow'
             : this.getRandomNewType()
         )
       ) {
-        for (const farm of this.farms) {
-          if (!upgradedThisLoop && this.tryUpgradeFarm(farm)) {
+        for (const office of this.offices) {
+          if (!upgradedThisLoop && this.tryUpgradeOffice(office)) {
             upgradedThisLoop = true;
           }
         }
@@ -463,7 +463,7 @@ export class Game {
 
     if (
       this.updateCount % SPAWNING_LOOP_LENGTH ===
-      100 + (this.farms.length > 1 ? this.updateRandomness2 : 0)
+      100 + (this.offices.length > 1 ? this.updateRandomness2 : 0)
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
       return;
@@ -513,9 +513,9 @@ export class Game {
       this.updateCount > 4000 &&
       this.updateCount % SPAWNING_LOOP_LENGTH === 500 + this.updateRandomness4
     ) {
-      if (!this.trySpawnFarm(this.getRandomNewType())) {
-        for (const farm of this.farms) {
-          if (!upgradedThisLoop && this.tryUpgradeFarm(farm)) {
+      if (!this.trySpawnOffice(this.getRandomNewType())) {
+        for (const office of this.offices) {
+          if (!upgradedThisLoop && this.tryUpgradeOffice(office)) {
             upgradedThisLoop = true;
           }
         }
@@ -523,10 +523,10 @@ export class Game {
     }
   }
 
-  private trySpawnFarm(destination: DestinationType): boolean {
-    const farmProps = this.getRandomFarmProps(destination);
-    const anchor = this.farms.length
-      ? this.farms[this.rng.int(0, this.farms.length)]
+  private trySpawnOffice(destination: DestinationType): boolean {
+    const officeProps = this.getRandomOfficeProps(destination);
+    const anchor = this.offices.length
+      ? this.offices[this.rng.int(0, this.offices.length)]
       : {
           x: Math.floor(this.grid.width / 2),
           y: Math.floor(this.grid.height / 2),
@@ -535,34 +535,34 @@ export class Game {
         };
 
     const pos = this.getRandomPosition({
-      width: farmProps.width,
-      height: farmProps.height,
+      width: officeProps.width,
+      height: officeProps.height,
       anchor: {
         x: anchor.x,
         y: anchor.y,
         width: anchor.width,
         height: anchor.height
       },
-      minDistance: this.farms.length ? 2 : 0,
-      maxDistance: this.farms.length + 3,
+      minDistance: this.offices.length ? 2 : 0,
+      maxDistance: this.offices.length + 3,
       maxNumAttempts: 40
     });
     if (!pos) return false;
 
-    const cfg = this.farmConfig(destination);
+    const cfg = this.officeConfig(destination);
 
     // Pick a random valid entrance neighbor
     const allNeighbors: Array<{ x: number; y: number }> = [];
-    // Orthogonal neighbors for a multi-tile farm:
+    // Orthogonal neighbors for a multi-tile office:
     // Top and Bottom edges
-    for (let ox = 0; ox < farmProps.width; ox++) {
+    for (let ox = 0; ox < officeProps.width; ox++) {
       allNeighbors.push({ x: pos.x + ox, y: pos.y - 1 }); // Top
-      allNeighbors.push({ x: pos.x + ox, y: pos.y + farmProps.height }); // Bottom
+      allNeighbors.push({ x: pos.x + ox, y: pos.y + officeProps.height }); // Bottom
     }
     // Left and Right edges
-    for (let oy = 0; oy < farmProps.height; oy++) {
+    for (let oy = 0; oy < officeProps.height; oy++) {
       allNeighbors.push({ x: pos.x - 1, y: pos.y + oy }); // Left
-      allNeighbors.push({ x: pos.x + farmProps.width, y: pos.y + oy }); // Right
+      allNeighbors.push({ x: pos.x + officeProps.width, y: pos.y + oy }); // Right
     }
 
     const validEntrances = allNeighbors.filter(
@@ -574,37 +574,37 @@ export class Game {
         ? validEntrances[this.rng.int(0, validEntrances.length)]
         : { x: pos.x, y: pos.y - 1 };
 
-    // Find the tile inside the farm that is closest to the entrance tile
+    // Find the tile inside the office that is closest to the entrance tile
     const entryTile = {
-      x: Math.max(pos.x, Math.min(pos.x + farmProps.width - 1, entrance.x)),
-      y: Math.max(pos.y, Math.min(pos.y + farmProps.height - 1, entrance.y))
+      x: Math.max(pos.x, Math.min(pos.x + officeProps.width - 1, entrance.x)),
+      y: Math.max(pos.y, Math.min(pos.y + officeProps.height - 1, entrance.y))
     };
 
-    const farm = new Building(
+    const office = new Building(
       LJS.vec2(
-        pos.x + (farmProps.width - 1) / 2,
-        pos.y + (farmProps.height - 1) / 2
+        pos.x + (officeProps.width - 1) / 2,
+        pos.y + (officeProps.height - 1) / 2
       ),
-      LJS.vec2(farmProps.width, farmProps.height),
-      makeId('farm'),
-      'farm',
+      LJS.vec2(officeProps.width, officeProps.height),
+      makeId('office'),
+      'office',
       destination,
       entrance,
       entryTile,
       cfg.needyness,
       cfg.numAnimals
     );
-    this.ensureFarmDemand(farm);
-    this.buildings.push(farm);
-    this.setStructureOccupancy(farm, farm.id);
+    this.ensureOfficeDemand(office);
+    this.buildings.push(office);
+    this.setStructureOccupancy(office, office.id);
 
-    // Add exactly one starter path segment from the farm to its entrance
+    // Add exactly one starter path segment from the office to its entrance
     this.paths.push({ a: entryTile, b: entrance });
     this.pathsChanged = true;
     return true;
   }
 
-  private farmConfig(destination: DestinationType): {
+  private officeConfig(destination: DestinationType): {
     needyness: number;
     numAnimals: number;
   } {
@@ -613,38 +613,38 @@ export class Game {
     return { needyness: 1300, numAnimals: 5 };
   }
 
-  private tryUpgradeFarm(farm: Building): boolean {
-    if (farm.destination === 'red') {
-      if (farm.numAnimals >= 5) return false;
-      farm.numAnimals += 2;
-      this.ensureFarmDemand(farm);
+  private tryUpgradeOffice(office: Building): boolean {
+    if (office.destination === 'red') {
+      if (office.numAnimals >= 5) return false;
+      office.numAnimals += 2;
+      this.ensureOfficeDemand(office);
       return true;
     }
-    if (farm.destination === 'blue') {
-      if (farm.numAnimals >= 7) return false;
-      farm.numAnimals += 1;
-      this.ensureFarmDemand(farm);
+    if (office.destination === 'blue') {
+      if (office.numAnimals >= 7) return false;
+      office.numAnimals += 1;
+      this.ensureOfficeDemand(office);
       return true;
     }
-    if (farm.numAnimals >= 9) return false;
-    farm.numAnimals += 4;
-    this.ensureFarmDemand(farm);
+    if (office.numAnimals >= 9) return false;
+    office.numAnimals += 4;
+    this.ensureOfficeDemand(office);
     return true;
   }
 
   private trySpawnFirstHouseOfLoop(): boolean {
-    const farm = this.pickFarmForFirstHouse();
-    if (!farm) return false;
+    const office = this.pickOfficeForFirstHouse();
+    if (!office) return false;
 
     const pos = this.getRandomPosition({
-      anchor: { x: farm.x, y: farm.y, width: 1, height: 1 },
+      anchor: { x: office.x, y: office.y, width: 1, height: 1 },
       minDistance: 3,
-      maxDistance: 2 + this.farms.length,
+      maxDistance: 2 + this.offices.length,
       maxNumAttempts: 40
     });
     if (!pos) return false;
 
-    this.spawnHouseAt(pos.x, pos.y, farm.destination);
+    this.spawnHouseAt(pos.x, pos.y, office.destination);
     return true;
   }
 
@@ -659,7 +659,7 @@ export class Game {
     const pos = this.getRandomPosition({
       anchor: { x: friendHouse.x, y: friendHouse.y, width: 1, height: 1 },
       minDistance: 1,
-      maxDistance: Math.max(2, this.farms.length),
+      maxDistance: Math.max(2, this.offices.length),
       maxNumAttempts: 40
     });
     if (!pos) return false;
@@ -740,23 +740,25 @@ export class Game {
     }
   }
 
-  private pickFarmForFirstHouse(): Building | null {
-    const yellowFarm = this.farms.find((f) => f.destination === 'yellow');
+  private pickOfficeForFirstHouse(): Building | null {
+    const yellowOffice = this.offices.find((f) => f.destination === 'yellow');
     const yellowHouses = this.houses.filter((y) => y.destination === 'yellow');
 
-    if (yellowFarm && yellowHouses.length < 2) return yellowFarm;
-    if (!this.farms.length) return null;
-    if (this.farms.length > 2)
-      return this.farms[this.rng.int(0, this.farms.length)];
-    return this.farms[this.farms.length - 1];
+    if (yellowOffice && yellowHouses.length < 2) return yellowOffice;
+    if (!this.offices.length) return null;
+    if (this.offices.length > 2)
+      return this.offices[this.rng.int(0, this.offices.length)];
+    return this.offices[this.offices.length - 1];
   }
 
   private getRandomNewType(): DestinationType {
-    if (this.farms.length < 2) return TYPES[this.farms.length] ?? 'red';
+    if (this.offices.length < 2) return TYPES[this.offices.length] ?? 'red';
 
     const goodTypes = TYPES.filter((t) => {
       const y = this.houses.filter((house) => house.destination === t).length;
-      const f = this.farms.filter((farm) => farm.destination === t).length;
+      const f = this.offices.filter(
+        (office) => office.destination === t
+      ).length;
       return y > f;
     });
 
@@ -765,15 +767,17 @@ export class Game {
   }
 
   private getRandomExistingType(): DestinationType {
-    if (this.farms.length < 2)
-      return TYPES[Math.max(0, this.farms.length - 1)] ?? 'red';
+    if (this.offices.length < 2)
+      return TYPES[Math.max(0, this.offices.length - 1)] ?? 'red';
 
     const scores = TYPES.map((t) => {
       const y = Math.max(
         1,
         this.houses.filter((house) => house.destination === t).length
       );
-      const f = this.farms.filter((farm) => farm.destination === t).length;
+      const f = this.offices.filter(
+        (office) => office.destination === t
+      ).length;
       return { t, w: f / y };
     });
 
@@ -882,7 +886,7 @@ export class Game {
     }
   }
 
-  private getRandomFarmProps(destination: DestinationType): {
+  private getRandomOfficeProps(destination: DestinationType): {
     width: number;
     height: number;
   } {
@@ -900,10 +904,10 @@ export class Game {
     }
   }
 
-  private backfillFarmDemandState(): void {
+  private backfillOfficeDemandState(): void {
     for (const structure of this.buildings) {
-      if (structure.role !== 'farm') continue;
-      this.ensureFarmDemand(structure);
+      if (structure.role !== 'office') continue;
+      this.ensureOfficeDemand(structure);
       structure.numAnimals = structure.demandTimers.length;
       structure.numIssues = structure.demandTimers.filter(
         (t) => t === 0
@@ -912,23 +916,23 @@ export class Game {
     }
   }
 
-  private ensureFarmDemand(farm: Building): void {
-    if (farm.role !== 'farm') return;
+  private ensureOfficeDemand(office: Building): void {
+    if (office.role !== 'office') return;
 
-    if (!farm.demandTimers) farm.demandTimers = [];
+    if (!office.demandTimers) office.demandTimers = [];
 
-    while (farm.demandTimers.length < farm.numAnimals) {
-      farm.demandTimers.push(this.nextAnimalDemandTimerSeconds(farm));
+    while (office.demandTimers.length < office.numAnimals) {
+      office.demandTimers.push(this.nextOfficeDemandTimerSeconds(office));
     }
 
-    if (farm.demandTimers.length > farm.numAnimals) {
-      farm.demandTimers.length = farm.numAnimals;
+    if (office.demandTimers.length > office.numAnimals) {
+      office.demandTimers.length = office.numAnimals;
     }
   }
 
-  private nextAnimalDemandTimerSeconds(farm: Building): number {
-    if (farm.destination === 'red') return 12 + this.rng.next() * 10;
-    if (farm.destination === 'blue') return 9 + this.rng.next() * 8;
+  private nextOfficeDemandTimerSeconds(office: Building): number {
+    if (office.destination === 'red') return 12 + this.rng.next() * 10;
+    if (office.destination === 'blue') return 9 + this.rng.next() * 8;
     return 16 + this.rng.next() * 12;
   }
 }

@@ -23,14 +23,14 @@ function tryAddEdge(
   const occupantA = game.grid.get(from.x, from.y)?.occupantId || undefined;
   const occupantB = game.grid.get(to.x, to.y)?.occupantId || undefined;
 
-  // Enforce Farm Entrance: if a tile is a farm, the other end MUST be its designated entrance.
-  const checkFarmEntrance = (
+  // Enforce Office Entrance: if a tile is an office, the other end MUST be its designated entrance.
+  const checkOfficeEntrance = (
     occupantId: string | undefined,
     otherPoint: { x: number; y: number }
   ): boolean => {
     if (!occupantId) return true;
     const building = game.buildings.find((b) => b.id === occupantId);
-    if (!building || building.role !== 'farm') return true;
+    if (!building || building.role !== 'office') return true;
     return (
       building.entrance.x === otherPoint.x &&
       building.entrance.y === otherPoint.y
@@ -38,8 +38,8 @@ function tryAddEdge(
   };
 
   if (
-    !checkFarmEntrance(occupantA, to) ||
-    !checkFarmEntrance(occupantB, from)
+    !checkOfficeEntrance(occupantA, to) ||
+    !checkOfficeEntrance(occupantB, from)
   ) {
     return false;
   }

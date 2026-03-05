@@ -24,7 +24,7 @@ const makeHouse = (stroke: string) =>
   <circle cx='50' cy='50' r='8' fill='none' stroke='${stroke}' stroke-width='3.3'/>
 `);
 
-const makeFarmPin = (stroke: string) =>
+const makeOfficePin = (stroke: string) =>
   makeImage(`
   <rect x='15' y='15' width='70' height='70' rx='12' fill='none' stroke='${stroke}' stroke-width='5'/>
   <circle cx='50' cy='50' r='9' fill='${stroke}'/>
@@ -46,9 +46,9 @@ export const sprites = {
   houseRed: makeHouse(C.red),
   houseBlue: makeHouse(C.blue),
   houseYellow: makeHouse(C.yellow),
-  farmRed: makeFarmPin(C.red),
-  farmBlue: makeFarmPin(C.blue),
-  farmYellow: makeFarmPin(C.yellow)
+  officeRed: makeOfficePin(C.red),
+  officeBlue: makeOfficePin(C.blue),
+  officeYellow: makeOfficePin(C.yellow)
 };
 
 export function drawSprite(

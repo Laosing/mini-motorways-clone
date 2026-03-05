@@ -5,7 +5,7 @@ import { updateVillagers } from '@systems/taskSystem';
 // legacy filename kept, now validates the Tiny Yurts-style service loop
 
 describe('service loop', () => {
-  it('people only leave home when path exists to matching farm', () => {
+  it('people only leave home when path exists to matching office', () => {
     const game = new Game(1);
     game.init();
     game.startPlay();
@@ -20,34 +20,36 @@ describe('service loop', () => {
     expect(villager.task).toBe('idle');
 
     const home = game.houses.find((y) => y.id === villager.homeHouseId)!;
-    const farm = game.farms.find(
+    const office = game.offices.find(
       (f) => f.destination === villager.destinationType
     )!;
     // Set up demand using the new demandTimers system
-    if (!farm.demandTimers.length) {
-      farm.demandTimers = [0];
-      farm.numAnimals = 1;
+    if (!office.demandTimers.length) {
+      office.demandTimers = [0];
+      office.numAnimals = 1;
     } else {
-      farm.demandTimers = farm.demandTimers.map((_, i) => i === 0 ? 0 : 10);
+      office.demandTimers = office.demandTimers.map((_: any, i: number) =>
+        i === 0 ? 0 : 10
+      );
     }
-    farm.numIssues = 1;
-    farm.demand = farm.needyness;
+    office.numIssues = 1;
+    office.demand = office.needyness;
 
-    // Create a minimal Manhattan path between house and matching farm.
+    // Create a minimal Manhattan path between house and matching office.
     let x = home.x;
     let y = home.y;
-    while (x !== farm.x) {
-      const nextX = x + Math.sign(farm.x - x);
+    while (x !== office.x) {
+      const nextX = x + Math.sign(office.x - x);
       game.paths.push({ a: { x, y }, b: { x: nextX, y } });
       x = nextX;
     }
-    while (y !== farm.y) {
-      const nextY = y + Math.sign(farm.y - y);
+    while (y !== office.y) {
+      const nextY = y + Math.sign(office.y - y);
       game.paths.push({ a: { x, y }, b: { x, y: nextY } });
       y = nextY;
     }
 
     updateVillagers(game, 0.1);
-    expect(['toFarm', 'atFarm']).toContain(villager.task);
+    expect(['toOffice', 'atOffice']).toContain(villager.task);
   });
 });

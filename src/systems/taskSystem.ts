@@ -234,7 +234,7 @@ function applyVillagerCrowdAvoidance(game: Game, villager: Villager): void {
   applyCrowdAvoidance(villager, _nearbyBuffer, CROWD_CFG);
 }
 
-function assignPeopleToFarmIssues(game: Game): void {
+function assignPeopleToOfficeIssues(game: Game): void {
   // 1. Group idle villagers by their home's entry tile node
   const idleMap = new Map<string, Villager[]>();
   for (const v of game.villagers) {
@@ -243,7 +243,7 @@ function assignPeopleToFarmIssues(game: Game): void {
     const home = game.houses.find((h) => h.id === v.homeHouseId);
     if (!home) continue;
 
-    // Only consider villagers whose homes match the farm's animal type
+    // Only consider villagers whose homes match the office's color type
     // This is a requirement from the existing logic
     const key = toKey(home.entryTile.x, home.entryTile.y);
     const list = idleMap.get(key) || [];
@@ -251,7 +251,7 @@ function assignPeopleToFarmIssues(game: Game): void {
     idleMap.set(key, list);
   }
 
-  // Build adjacency map for BFS (reuse this for all farms)
+  // Build adjacency map for BFS (reuse this for all offices)
   const adj = new Map<string, Array<{ x: number; y: number }>>();
   for (const edge of game.paths) {
     const ka = toKey(edge.a.x, edge.a.y);
@@ -266,21 +266,21 @@ function assignPeopleToFarmIssues(game: Game): void {
     adj.set(kb, nb);
   }
 
-  for (const farm of game.farms) {
-    const requiredWorkers = farm.numIssues;
-    const currentAssigned = farm.assignedVillagerIds.length;
+  for (const office of game.offices) {
+    const requiredWorkers = office.numIssues;
+    const currentAssigned = office.assignedVillagerIds.length;
     if (currentAssigned >= requiredWorkers) continue;
 
     let needed = requiredWorkers - currentAssigned;
-    const farmEntry = farm.entryTile;
-    const farmEntryKey = toKey(farmEntry.x, farmEntry.y);
+    const officeEntry = office.entryTile;
+    const officeEntryKey = toKey(officeEntry.x, officeEntry.y);
 
-    // 2. BFS from farm entry to find nearest idle villagers
+    // 2. BFS from office entry to find nearest idle villagers
     const queue: Array<{
       pos: { x: number; y: number };
       path: Array<{ x: number; y: number }>;
-    }> = [{ pos: farmEntry, path: [farmEntry] }];
-    const visited = new Set<string>([farmEntryKey]);
+    }> = [{ pos: officeEntry, path: [officeEntry] }];
+    const visited = new Set<string>([officeEntryKey]);
 
     while (queue.length > 0 && needed > 0) {
       const current = queue.shift()!;
@@ -291,7 +291,7 @@ function assignPeopleToFarmIssues(game: Game): void {
       if (candidates) {
         // Filter by destination type (e.g. red, blue)
         const matched = candidates.filter(
-          (v) => v.destinationType === farm.destination
+          (v) => v.destinationType === office.destination
         );
 
         while (matched.length > 0 && needed > 0) {
@@ -302,14 +302,14 @@ function assignPeopleToFarmIssues(game: Game): void {
           if (idx !== -1) list.splice(idx, 1);
 
           // Assign task
-          v.task = 'toFarm';
-          v.target = { x: farmEntry.x, y: farmEntry.y };
-          // The BFS path is from farm -> home, we need home -> farm
+          v.task = 'toOffice';
+          v.target = { x: officeEntry.x, y: officeEntry.y };
+          // The BFS path is from office -> home, we need home -> office
           v.path = [...current.path].reverse();
           v.lastReachedPos = { x: v.x, y: v.y };
           v.originalRouteLength = v.path.length;
-          v.assignedFarmId = farm.id;
-          farm.assignedVillagerIds.push(v.id);
+          v.assignedOfficeId = office.id;
+          office.assignedVillagerIds.push(v.id);
           needed--;
         }
       }
@@ -330,15 +330,15 @@ function assignPeopleToFarmIssues(game: Game): void {
   }
 }
 
-function unassignFromFarm(
+function unassignFromOffice(
   game: Game,
   villagerId: string,
-  farmId: string | null
+  officeId: string | null
 ): void {
-  if (!farmId) return;
-  const farm = game.farms.find((f) => f.id === farmId);
-  if (!farm) return;
-  farm.assignedVillagerIds = farm.assignedVillagerIds.filter(
+  if (!officeId) return;
+  const office = game.offices.find((f) => f.id === officeId);
+  if (!office) return;
+  office.assignedVillagerIds = office.assignedVillagerIds.filter(
     (id) => id !== villagerId
   );
 }
@@ -356,8 +356,8 @@ function sanitizeVillagerPosition(game: Game, villager: Villager): void {
     villager.path = [];
     villager.target = null;
     villager.task = 'idle';
-    unassignFromFarm(game, villager.id, villager.assignedFarmId);
-    villager.assignedFarmId = null;
+    unassignFromOffice(game, villager.id, villager.assignedOfficeId);
+    villager.assignedOfficeId = null;
     return;
   }
 
@@ -388,16 +388,16 @@ export function updateVillagers(game: Game, dt: number): void {
   updateSpatialGrid(game);
   // Only check for new assignments every 10 frames to save CPU
   if (game.updateCount % 10 === 0) {
-    assignPeopleToFarmIssues(game);
+    assignPeopleToOfficeIssues(game);
   }
 
   for (const villager of game.villagers) {
-    if (villager.task === 'idle' || villager.task === 'atFarm') {
+    if (villager.task === 'idle' || villager.task === 'atOffice') {
       villager.dx *= IDLE_DAMPING;
       villager.dy *= IDLE_DAMPING;
     }
 
-    if (villager.task === 'toFarm' || villager.task === 'toHome') {
+    if (villager.task === 'toOffice' || villager.task === 'toHome') {
       steerAlongRoute(game, villager);
       applyVillagerCrowdAvoidance(game, villager);
     }
@@ -406,7 +406,7 @@ export function updateVillagers(game: Game, dt: number): void {
     sanitizeVillagerPosition(game, villager);
 
     // Stuck detection logic
-    if (villager.task === 'toFarm' || villager.task === 'toHome') {
+    if (villager.task === 'toOffice' || villager.task === 'toHome') {
       const dx = villager.x - (villager.lastPosForStuck?.x ?? 0);
       const dy = villager.y - (villager.lastPosForStuck?.y ?? 0);
       const distSq = dx * dx + dy * dy;
@@ -461,27 +461,29 @@ export function updateVillagers(game: Game, dt: number): void {
     }
 
     if (
-      (villager.task === 'toFarm' || villager.task === 'toHome') &&
+      (villager.task === 'toOffice' || villager.task === 'toHome') &&
       !villager.path.length &&
       villager.target
     ) {
-      if (villager.task === 'toFarm') {
-        const farm = game.farms.find((f) => f.id === villager.assignedFarmId);
-        if (farm) {
+      if (villager.task === 'toOffice') {
+        const office = game.offices.find(
+          (f) => f.id === villager.assignedOfficeId
+        );
+        if (office) {
           villager.x = villager.target.x;
           villager.y = villager.target.y;
           villager.dx = 0;
           villager.dy = 0;
-          game.consumeFarmIssue(farm);
+          game.consumeOfficeIssue(office);
           game.servedTrips += 1;
-          villager.task = 'atFarm';
+          villager.task = 'atOffice';
           villager.lastReachedPos = null;
           villager.waitTimer = 1.2;
         } else {
           villager.task = 'idle';
           villager.lastReachedPos = null;
-          unassignFromFarm(game, villager.id, villager.assignedFarmId);
-          villager.assignedFarmId = null;
+          unassignFromOffice(game, villager.id, villager.assignedOfficeId);
+          villager.assignedOfficeId = null;
         }
       } else {
         villager.x = villager.target.x;
@@ -490,20 +492,20 @@ export function updateVillagers(game: Game, dt: number): void {
         villager.dy = 0;
         villager.task = 'idle';
         villager.lastReachedPos = null;
-        unassignFromFarm(game, villager.id, villager.assignedFarmId);
-        villager.assignedFarmId = null;
+        unassignFromOffice(game, villager.id, villager.assignedOfficeId);
+        villager.assignedOfficeId = null;
       }
       villager.target = null;
     }
 
-    if (villager.task === 'atFarm') {
+    if (villager.task === 'atOffice') {
       villager.waitTimer -= dt;
       if (villager.waitTimer <= 0) {
         const home = game.houses.find((y) => y.id === villager.homeHouseId);
         if (!home) {
           villager.task = 'idle';
-          unassignFromFarm(game, villager.id, villager.assignedFarmId);
-          villager.assignedFarmId = null;
+          unassignFromOffice(game, villager.id, villager.assignedOfficeId);
+          villager.assignedOfficeId = null;
           continue;
         }
 
@@ -527,8 +529,8 @@ export function updateVillagers(game: Game, dt: number): void {
           villager.task = 'idle';
           villager.target = null;
           villager.path = [];
-          unassignFromFarm(game, villager.id, villager.assignedFarmId);
-          villager.assignedFarmId = null;
+          unassignFromOffice(game, villager.id, villager.assignedOfficeId);
+          villager.assignedOfficeId = null;
         }
       }
     }

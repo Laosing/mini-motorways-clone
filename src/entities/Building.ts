@@ -3,7 +3,7 @@ import type { Entity } from './Entity';
 import { COLORS, COLOR_RESOURCES } from '@core/colors';
 
 export type DestinationType = 'red' | 'blue' | 'yellow';
-export type StructureRole = 'house' | 'farm';
+export type StructureRole = 'house' | 'office';
 
 export class Building extends LJS.EngineObject implements Entity {
   readonly id: string;
@@ -81,13 +81,13 @@ export class Building extends LJS.EngineObject implements Entity {
     if (this.role === 'house') {
       this.renderHouse();
     } else {
-      this.renderFarm();
+      this.renderOffice();
     }
     this.renderDemandPins();
   }
 
   private static _cachedHousePoints: LJS.Vector2[] = [];
-  private _cachedFarmPoints: LJS.Vector2[] = [];
+  private _cachedOfficePoints: LJS.Vector2[] = [];
   private _lastRenderSize = LJS.vec2();
 
   private renderHouse() {
@@ -111,7 +111,7 @@ export class Building extends LJS.EngineObject implements Entity {
     );
   }
 
-  private renderFarm() {
+  private renderOffice() {
     const destColor = this.getDestinationColor();
     const padding = 0.15;
     const r = 0.3;
@@ -119,12 +119,12 @@ export class Building extends LJS.EngineObject implements Entity {
     const h = this.size.y - padding;
 
     if (
-      this._cachedFarmPoints.length === 0 ||
+      this._cachedOfficePoints.length === 0 ||
       this._lastRenderSize.x !== this.size.x ||
       this._lastRenderSize.y !== this.size.y
     ) {
       this._lastRenderSize.set(this.size.x, this.size.y);
-      this._cachedFarmPoints = [];
+      this._cachedOfficePoints = [];
       const segments = 8;
       const hw = w / 2;
       const hh = h / 2;
@@ -139,7 +139,7 @@ export class Building extends LJS.EngineObject implements Entity {
       for (const corner of corners) {
         for (let i = 0; i <= segments; i++) {
           const angle = corner.start + (i / segments) * (Math.PI / 2);
-          this._cachedFarmPoints.push(
+          this._cachedOfficePoints.push(
             LJS.vec2(
               corner.x + Math.cos(angle) * r,
               corner.y + Math.sin(angle) * r
@@ -150,7 +150,7 @@ export class Building extends LJS.EngineObject implements Entity {
     }
 
     LJS.drawPoly(
-      this._cachedFarmPoints,
+      this._cachedOfficePoints,
       destColor, // Solid fill
       COLORS.outlineWidth,
       COLOR_RESOURCES.white,
