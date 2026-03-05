@@ -57,6 +57,7 @@ function tryAddEdge(
   if (isInternalOccupiedNode(from) || isInternalOccupiedNode(to)) return false;
 
   game.paths.push({ a: { ...from }, b: { ...to } });
+  game.pathsChanged = true;
   return true;
 }
 
@@ -184,6 +185,7 @@ export function handleInput(game: Game): void {
             } else {
               path.a = { ...potentialNode };
             }
+            game.pathsChanged = true;
           }
         }
       }

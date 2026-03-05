@@ -9,6 +9,8 @@ export function wireEngine(game: Game): void {
   function gameInit(): void {
     LJS.setShowSplashScreen(false);
     LJS.setCanvasPixelated(false);
+    // Fixed resolution to prevent stretching and ensure 1:1 aspect ratio for paths/units
+    LJS.setCanvasFixedSize(LJS.vec2(1280, 720));
     LJS.setCanvasClearColor(new LJS.Color().setHex(COLORS.grass));
     game.init();
   }

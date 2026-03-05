@@ -3,7 +3,6 @@ import * as LJS from 'littlejsengine';
 import { COLORS, COLOR_RESOURCES } from '@core/colors';
 
 let terrainLayer: LJS.TileLayer | undefined;
-let pathLayer: LJS.TileLayer | undefined;
 let mainTileInfo: LJS.TileInfo | undefined;
 
 function ensureLayers(game: Game) {
@@ -12,20 +11,19 @@ function ensureLayers(game: Game) {
   const { width, height } = game.grid;
   const s = 16; // Tile size
 
-  // Create procedural tileset canvas
+  // Create procedural tileset canvas for grass
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
 
-  // Tile 0: Grass
   ctx.fillStyle = COLORS.grass;
   ctx.fillRect(0, 0, s, s);
   ctx.strokeStyle = 'rgba(0,0,0,0.02)';
   ctx.lineWidth = 1;
   ctx.strokeRect(0.5, 0.5, s - 1, s - 1);
 
-  // No need for procedural road tiles as we use crisp vector lines now
+  // Fill tileset with grass
   for (let mask = 1; mask < 16; mask++) {
     const tx = (mask % 8) * s;
     const ty = Math.floor(mask / 8) * s;
@@ -33,16 +31,11 @@ function ensureLayers(game: Game) {
     ctx.fillRect(tx, ty, s, s);
   }
 
-  // Create texture and tile info
   const texture = new LJS.TextureInfo(canvas as any);
   mainTileInfo = new LJS.TileInfo(LJS.vec2(0, 0), LJS.vec2(s, s));
   mainTileInfo.textureInfo = texture;
 
-  // Create layers
-  // The layer center should be at (width/2 - 0.5, height/2 - 0.5)
-  // so that tiles at (0,0) are centered at world (0,0)
   const layerPos = LJS.vec2(width / 2 - 0.5, height / 2 - 0.5);
-
   terrainLayer = new LJS.TileLayer(
     layerPos,
     LJS.vec2(width, height),
@@ -50,7 +43,6 @@ function ensureLayers(game: Game) {
   );
   terrainLayer.renderOrder = -10;
 
-  // Set initial terrain
   for (let x = 0; x < width; x++) {
     for (let y = 0; y < height; y++) {
       terrainLayer.setData(LJS.vec2(x, y), new LJS.TileLayerData(0));
@@ -58,6 +50,38 @@ function ensureLayers(game: Game) {
   }
   terrainLayer.redraw();
 }
+
+/**
+ * Draws a pass of the road network (either the border pass or the fill pass)
+ * drawing all elements of that color at once to ensure fusion.
+ */
+function drawPathPass(edges: any[], width: number, color: LJS.Color) {
+  if (edges.length === 0) return;
+  const r = width;
+
+  // 1. Draw all lines in this pass
+  for (const edge of edges) {
+    const a = LJS.vec2(edge.a.x, edge.a.y);
+    const b = LJS.vec2(edge.b.x, edge.b.y);
+    // Draw line with square caps (caps are covered by our own circles)
+    LJS.drawLine(a, b, width, color);
+  }
+
+  // 2. Draw all joint circles in this pass to create rounds
+  const nodes = new Set<string>();
+  for (const edge of edges) {
+    nodes.add(`${edge.a.x},${edge.a.y}`);
+    nodes.add(`${edge.b.x},${edge.b.y}`);
+  }
+
+  const tempPos = LJS.vec2();
+  nodes.forEach((key) => {
+    const [nx, ny] = key.split(',').map(Number);
+    tempPos.set(nx, ny);
+    LJS.drawCircle(tempPos, r, color);
+  });
+}
+
 export function drawWorld(game: Game): void {
   ensureLayers(game);
 
@@ -79,50 +103,22 @@ export function drawWorld(game: Game): void {
     LJS.drawLine(tempPosA, tempPosB, 0.02, gridColor);
   }
 
-  // Draw paths with vector lines for a crisp look
-  const pColor = COLOR_RESOURCES.path;
-  const pWidth = 0.35;
+  // --- PATH RENDERING (FUSED MULTI-PASS) ---
+  const pWidth = 0.52; // User preferred thickness
   const border = COLORS.outlineWidth;
-  const jointRadius = pWidth * 0.52;
+  const pColor = COLOR_RESOURCES.path;
 
-  const drawRoadNetwork = (
-    edges: any[],
-    color: LJS.Color,
-    isBorder: boolean
-  ) => {
-    if (edges.length === 0) return;
-    const w = isBorder ? pWidth + border : pWidth;
-    const r = isBorder ? jointRadius + border / 2 : jointRadius;
+  // 1. MAIN NETWORK
+  // Draw entire white footprint
+  drawPathPass(game.paths, pWidth + border * 2, COLOR_RESOURCES.white);
+  // Draw entire dark network over it
+  drawPathPass(game.paths, pWidth, pColor);
 
-    // Pass 1: Lines
-    for (const edge of edges) {
-      tempPosA.set(edge.a.x, edge.a.y);
-      tempPosB.set(edge.b.x, edge.b.y);
-      LJS.drawLine(tempPosA, tempPosB, w, color);
-    }
-
-    // Pass 2: Joints
-    const nodes = new Set<string>();
-    for (const edge of edges) {
-      nodes.add(`${edge.a.x},${edge.a.y}`);
-      nodes.add(`${edge.b.x},${edge.b.y}`);
-    }
-    nodes.forEach((key) => {
-      const [nx, ny] = key.split(',').map(Number);
-      tempPosA.set(nx, ny);
-      LJS.drawCircle(tempPosA, r, color);
-    });
-  };
-
-  // Draw main network: Border then Fill
-  drawRoadNetwork(game.paths, COLOR_RESOURCES.white, true);
-  drawRoadNetwork(game.paths, pColor, false);
-
-  // Draw preview network: Border then Fill (with alpha)
-  const previewWhite = new LJS.Color(1, 1, 1, 0.4);
-  const previewFill = new LJS.Color(pColor.r, pColor.g, pColor.b, 0.2);
-  drawRoadNetwork(game.pathPreview, previewWhite, true);
-  drawRoadNetwork(game.pathPreview, previewFill, false);
+  // 2. PREVIEW NETWORK (Ghost Paths)
+  const previewWhite = new LJS.Color(1, 1, 1, 0.3);
+  const previewFill = new LJS.Color(pColor.r, pColor.g, pColor.b, 0.15);
+  drawPathPass(game.pathPreview, pWidth + border * 2, previewWhite);
+  drawPathPass(game.pathPreview, pWidth, previewFill);
 
   // Draw cursor
   if (

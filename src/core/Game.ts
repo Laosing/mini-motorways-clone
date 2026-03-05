@@ -68,6 +68,7 @@ export class Game {
   private updateRandomness4 = 0;
   private houseFailed = false;
   autoSpawningEnabled = true;
+  pathsChanged = true;
 
   constructor(seed = Date.now() >>> 0) {
     this.rng = new SeededRng(seed);
@@ -226,6 +227,7 @@ export class Game {
   /** Test Helper: Rapidly add a path between two points */
   public addTestPath(x1: number, y1: number, x2: number, y2: number): void {
     this.paths.push({ a: { x: x1, y: y1 }, b: { x: x2, y: y2 } });
+    this.pathsChanged = true;
   }
 
   /** Test Helper: Get an entity by its ID */
@@ -383,6 +385,7 @@ export class Game {
     this.backfillStructureSizes();
     this.backfillFarmDemandState();
     this.rebuildOccupancyFromStructures();
+    this.pathsChanged = true;
   }
 
   public updateFarmDemand(dt: number): void {
@@ -596,7 +599,7 @@ export class Game {
       Math.min(pos.y + farmProps.height - 1, entrance.y)
     );
     this.paths.push({ a: { x: insideX, y: insideY }, b: entrance });
-
+    this.pathsChanged = true;
     return true;
   }
 
@@ -698,6 +701,7 @@ export class Game {
 
     // Add a starter path from the house to its entrance
     this.paths.push({ a: { x, y }, b: entrance });
+    this.pathsChanged = true;
 
     for (let p = 0; p < 2; p += 1) {
       const varianceX = this.rng.next() * 0.5 - 0.25;
