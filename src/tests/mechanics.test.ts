@@ -77,11 +77,11 @@ describe('Game Mechanics & Persistence', () => {
     const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
     office.forceTestDemand(true);
 
-    expect(office.numIssues).toBe(office.numAnimals);
+    expect(office.numIssues).toBe(office.numDemand);
     expect(office.demand).toBeGreaterThan(0);
 
     // Simulate resolution
     game.consumeOfficeIssue(office);
-    expect(office.numIssues).toBe(office.numAnimals - 1);
+    expect(office.numIssues).toBe(office.numDemand - 1);
   });
 });

@@ -26,7 +26,7 @@ describe('service loop', () => {
     // Set up demand using the new demandTimers system
     if (!office.demandTimers.length) {
       office.demandTimers = [0];
-      office.numAnimals = 1;
+      office.numDemand = 1;
     } else {
       office.demandTimers = office.demandTimers.map((_: any, i: number) =>
         i === 0 ? 0 : 10

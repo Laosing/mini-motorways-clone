@@ -32,12 +32,59 @@ interface SpawnPositionOptions {
   maxNumAttempts?: number;
 }
 
+interface LegacyAnimal {
+  demandTimer: number;
+}
+
+export interface BuildingSnapshot {
+  id: string;
+  role: StructureRole;
+  destination: DestinationType;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  pos: { x: number; y: number };
+  size: { x: number; y: number };
+  assignedVillagerIds: string[];
+  entrance: { x: number; y: number };
+  entryTile: { x: number; y: number };
+  demandTimers: number[];
+  active: boolean;
+  demand: number;
+  numIssues: number;
+  needyness: number;
+  numDemand: number;
+  // Backward compatibility with old save formats
+  animals?: LegacyAnimal[];
+}
+
+export interface VillagerSnapshot {
+  id: string;
+  x: number;
+  y: number;
+  pos: { x: number; y: number };
+  homeHouseId: string;
+  destinationType: DestinationType;
+  task: import('@entities/Villager').VillagerTask;
+  path: { x: number; y: number }[];
+  assignedOfficeId: string | null;
+  dx: number;
+  dy: number;
+  rotation: number;
+  originalRouteLength: number;
+  lastReachedPos: { x: number; y: number } | null;
+  waitTimer: number;
+  // Backward compatibility with old save formats
+  homeYurtId?: string;
+}
+
 export interface Snapshot {
   day: number;
   timeInDay: number;
   gridTiles: ReturnType<GridMap['snapshot']>;
-  buildings: any[];
-  villagers: any[];
+  buildings: BuildingSnapshot[];
+  villagers: VillagerSnapshot[];
   paths: PathEdge[];
   seed: number;
   servedTrips: number;
@@ -87,7 +134,7 @@ export class Game {
       loaded &&
       Array.isArray(loaded.buildings) &&
       loaded.buildings.every(
-        (b) => b.role === 'yurt' || b.role === 'house' || b.role === 'office'
+        (b) => (b.role as string) === 'yurt' || b.role === 'house' || b.role === 'office'
       )
     );
 
@@ -219,7 +266,7 @@ export class Game {
     if (role === 'office') {
       const cfg = this.officeConfig(type);
       building.needyness = cfg.needyness;
-      building.numAnimals = cfg.numAnimals;
+      building.numDemand = cfg.numDemand;
       this.ensureOfficeDemand(building);
     }
     return building;
@@ -262,7 +309,7 @@ export class Game {
         demand: b.demand,
         numIssues: b.numIssues,
         needyness: b.needyness,
-        numAnimals: b.numAnimals
+        numDemand: b.numDemand
       })),
       villagers: this.villagers.map((v) => ({
         id: v.id,
@@ -323,18 +370,18 @@ export class Game {
         pos,
         LJS.vec2(width, height),
         b.id,
-        b.role === 'yurt' ? 'house' : b.role,
+        (b.role as string) === 'yurt' ? 'house' : b.role,
         b.destination,
         b.entrance || { x: Math.round(pos.x), y: Math.round(pos.y) + 1 }, // Fallback
         b.entryTile || { x: Math.round(pos.x), y: Math.round(pos.y) }, // Fallback
         b.needyness,
-        b.numAnimals
+        b.numDemand
       );
       building.assignedVillagerIds = [...(b.assignedVillagerIds ?? [])];
       building.demandTimers = b.demandTimers
         ? [...b.demandTimers]
         : b.animals
-          ? b.animals.map((anim: any) => anim.demandTimer)
+          ? b.animals.map((anim) => anim.demandTimer)
           : [];
       building.active = b.active ?? true;
       building.demand = b.demand ?? 0;
@@ -364,7 +411,7 @@ export class Game {
         pos = LJS.vec2(0, 0);
       }
 
-      const homeId = v.homeHouseId || v.homeYurtId;
+      const homeId = v.homeHouseId || v.homeYurtId || vid;
       const villager = new Villager(pos, vid, homeId, v.destinationType);
       villager.task = v.task;
       villager.path = [...(v.path ?? [])];
@@ -592,7 +639,7 @@ export class Game {
       entrance,
       entryTile,
       cfg.needyness,
-      cfg.numAnimals
+      cfg.numDemand
     );
     this.ensureOfficeDemand(office);
     this.buildings.push(office);
@@ -606,28 +653,28 @@ export class Game {
 
   private officeConfig(destination: DestinationType): {
     needyness: number;
-    numAnimals: number;
+    numDemand: number;
   } {
-    if (destination === 'red') return { needyness: 225, numAnimals: 3 };
-    if (destination === 'blue') return { needyness: 240, numAnimals: 3 };
-    return { needyness: 1300, numAnimals: 5 };
+    if (destination === 'red') return { needyness: 225, numDemand: 3 };
+    if (destination === 'blue') return { needyness: 240, numDemand: 3 };
+    return { needyness: 1300, numDemand: 5 };
   }
 
   private tryUpgradeOffice(office: Building): boolean {
     if (office.destination === 'red') {
-      if (office.numAnimals >= 5) return false;
-      office.numAnimals += 2;
+      if (office.numDemand >= 5) return false;
+      office.numDemand += 2;
       this.ensureOfficeDemand(office);
       return true;
     }
     if (office.destination === 'blue') {
-      if (office.numAnimals >= 7) return false;
-      office.numAnimals += 1;
+      if (office.numDemand >= 7) return false;
+      office.numDemand += 1;
       this.ensureOfficeDemand(office);
       return true;
     }
-    if (office.numAnimals >= 9) return false;
-    office.numAnimals += 4;
+    if (office.numDemand >= 9) return false;
+    office.numDemand += 4;
     this.ensureOfficeDemand(office);
     return true;
   }
@@ -908,7 +955,7 @@ export class Game {
     for (const structure of this.buildings) {
       if (structure.role !== 'office') continue;
       this.ensureOfficeDemand(structure);
-      structure.numAnimals = structure.demandTimers.length;
+      structure.numDemand = structure.demandTimers.length;
       structure.numIssues = structure.demandTimers.filter(
         (t) => t === 0
       ).length;
@@ -921,12 +968,12 @@ export class Game {
 
     if (!office.demandTimers) office.demandTimers = [];
 
-    while (office.demandTimers.length < office.numAnimals) {
+    while (office.demandTimers.length < office.numDemand) {
       office.demandTimers.push(this.nextOfficeDemandTimerSeconds(office));
     }
 
-    if (office.demandTimers.length > office.numAnimals) {
-      office.demandTimers.length = office.numAnimals;
+    if (office.demandTimers.length > office.numDemand) {
+      office.demandTimers.length = office.numDemand;
     }
   }
 

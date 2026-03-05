@@ -60,15 +60,6 @@ export function setupBuildMenu(_game: Game): void {}
 
 export function updateHUD(game: Game): void {
   if (!hudEl) return;
-  const redDemand = game.offices
-    .filter((f) => f.destination === 'red')
-    .reduce((acc: number, f) => acc + (f.demand ?? 0), 0);
-  const blueDemand = game.offices
-    .filter((f) => f.destination === 'blue')
-    .reduce((acc: number, f) => acc + (f.demand ?? 0), 0);
-  const yellowDemand = game.offices
-    .filter((f) => f.destination === 'yellow')
-    .reduce((acc: number, f) => acc + (f.demand ?? 0), 0);
 
   hudEl.innerHTML = `
     <div style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #111;">Kingdom Management</div>

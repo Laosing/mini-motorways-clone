@@ -15,7 +15,7 @@ export class Building extends LJS.EngineObject implements Entity {
   active: boolean = true;
   demand: number = 0;
   needyness: number = 0;
-  numAnimals: number = 0;
+  numDemand: number = 0;
   numIssues: number = 0; // This will now represent active demand pins
   assignedVillagerIds: string[] = [];
   readonly entrance: { x: number; y: number };
@@ -33,7 +33,7 @@ export class Building extends LJS.EngineObject implements Entity {
     entrance: { x: number; y: number },
     entryTile?: { x: number; y: number },
     needyness: number = 0,
-    numAnimals: number = 0
+    numDemand: number = 0
   ) {
     super(pos, size);
     this.id = id;
@@ -47,11 +47,11 @@ export class Building extends LJS.EngineObject implements Entity {
     this.width = size.x;
     this.height = size.y;
     this.needyness = needyness;
-    this.numAnimals = numAnimals;
+    this.numDemand = numDemand;
     this.renderOrder = 5; // Above terrain, below villagers
 
     // Initialize timers for potential demand "slots"
-    for (let i = 0; i < numAnimals; i++) {
+    for (let i = 0; i < numDemand; i++) {
       this._demandTimers.push(Math.random() * 10 + 5);
     }
   }
@@ -191,7 +191,7 @@ export class Building extends LJS.EngineObject implements Entity {
 
   public forceTestDemand(hasDemand: boolean): void {
     if (hasDemand) {
-      this.numIssues = this.numAnimals;
+      this.numIssues = this.numDemand;
       this._demandTimers = this._demandTimers.map(() => 0);
     } else {
       this.numIssues = 0;
