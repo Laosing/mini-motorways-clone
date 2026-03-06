@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Game } from '@core/Game';
+import { BUILDING_CONFIG } from '@core/config';
 import { Worker } from '@entities/Worker';
 import * as LJS from 'littlejsengine';
 
@@ -181,9 +182,11 @@ describe('Save/Load System', () => {
 
     const restoredOffice = game2.offices[0];
 
-    expect(restoredOffice.numDemand).toBe(3);
-    expect(restoredOffice.numIssues).toBe(3);
-    expect(restoredOffice.demandTimers.length).toBe(3);
+    expect(restoredOffice.numDemand).toBe(BUILDING_CONFIG.office.red.numDemand);
+    expect(restoredOffice.numIssues).toBe(BUILDING_CONFIG.office.red.numDemand);
+    expect(restoredOffice.demandTimers.length).toBe(
+      BUILDING_CONFIG.office.red.numDemand
+    );
   });
 
   it('handles multi-tile buildings in snapshot', () => {

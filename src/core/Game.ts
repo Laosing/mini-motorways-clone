@@ -1,5 +1,12 @@
 import * as LJS from 'littlejsengine';
-import { GAME_CONFIG, SAVE_KEY } from './config';
+import {
+  ENGINE_CONFIG,
+  MAP_CONFIG,
+  GAMEPLAY_CONFIG,
+  BUILDING_CONFIG,
+  SPAWNING_CONFIG,
+  SAVE_KEY
+} from './config';
 import { SeededRng } from './rng';
 import { StateMachine } from './stateMachine';
 import { EventBus } from './events';
@@ -115,11 +122,11 @@ export class Game {
 
   constructor(seed = Date.now() >>> 0) {
     this.rng = new SeededRng(seed);
-    this.grid = new GridMap(GAME_CONFIG.mapWidth, GAME_CONFIG.mapHeight);
+    this.grid = new GridMap(MAP_CONFIG.width, MAP_CONFIG.height);
     this.camera = {
-      x: GAME_CONFIG.mapWidth / 2,
-      y: GAME_CONFIG.mapHeight / 2,
-      scale: GAME_CONFIG.cameraScale
+      x: MAP_CONFIG.width / 2,
+      y: MAP_CONFIG.height / 2,
+      scale: ENGINE_CONFIG.cameraScale
     };
   }
 
@@ -183,8 +190,8 @@ export class Game {
 
     this.updateCount += 1;
     this.timeInDay += dt;
-    if (this.timeInDay >= GAME_CONFIG.dayLengthSeconds) {
-      this.timeInDay -= GAME_CONFIG.dayLengthSeconds;
+    if (this.timeInDay >= GAMEPLAY_CONFIG.dayLengthSeconds) {
+      this.timeInDay -= GAMEPLAY_CONFIG.dayLengthSeconds;
       this.day += 1;
     }
 
@@ -344,8 +351,8 @@ export class Game {
     this.day = snapshot.day;
     this.timeInDay = snapshot.timeInDay;
     this.grid = GridMap.fromSnapshot(
-      GAME_CONFIG.mapWidth,
-      GAME_CONFIG.mapHeight,
+      MAP_CONFIG.width,
+      MAP_CONFIG.height,
       snapshot.gridTiles
     );
 
@@ -367,7 +374,7 @@ export class Game {
         pos = LJS.vec2(b.x + (width - 1) / 2, b.y + (height - 1) / 2);
       } else {
         // Absolute fallback to avoid NaN crash
-        pos = LJS.vec2(GAME_CONFIG.mapWidth / 2, GAME_CONFIG.mapHeight / 2);
+        pos = LJS.vec2(MAP_CONFIG.width / 2, MAP_CONFIG.height / 2);
       }
 
       const building = new Building(
@@ -499,7 +506,7 @@ export class Game {
     if (!this.autoSpawningEnabled) return;
     let upgradedThisLoop = false;
 
-    if (this.updateCount % GAME_CONFIG.spawning.loopLength === 0) {
+    if (this.updateCount % SPAWNING_CONFIG.loopLength === 0) {
       this.updateRandomness1 = this.rng.int(0, 40);
       this.updateRandomness2 = this.rng.int(0, 40);
       this.updateRandomness3 = this.rng.int(0, 40);
@@ -509,7 +516,7 @@ export class Game {
     if (
       this.updateCount === 0 ||
       (this.updateCount > 200 &&
-        this.updateCount % GAME_CONFIG.spawning.loopLength ===
+        this.updateCount % SPAWNING_CONFIG.loopLength ===
           (this.offices.length ? this.updateRandomness1 : 0))
     ) {
       if (
@@ -530,7 +537,7 @@ export class Game {
     }
 
     if (
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
       100 + (this.offices.length > 1 ? this.updateRandomness2 : 0)
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
@@ -539,7 +546,7 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
         120 + this.updateRandomness2
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
@@ -548,7 +555,7 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
         140 + this.updateRandomness2
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
@@ -556,7 +563,7 @@ export class Game {
     }
 
     if (
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
       300 + this.updateRandomness3
     ) {
       this.houseFailed = !this.trySpawnSecondHouseOfLoop();
@@ -565,7 +572,7 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
         320 + this.updateRandomness3
     ) {
       this.houseFailed = !this.trySpawnSecondHouseOfLoop();
@@ -574,7 +581,7 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
         340 + this.updateRandomness3
     ) {
       this.houseFailed = !this.trySpawnSecondHouseOfLoop();
@@ -583,7 +590,7 @@ export class Game {
 
     if (
       this.updateCount > 4000 &&
-      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+      this.updateCount % SPAWNING_CONFIG.loopLength ===
         500 + this.updateRandomness4
     ) {
       if (!this.trySpawnOffice(this.getRandomNewType())) {
@@ -616,11 +623,9 @@ export class Game {
         width: anchor.width,
         height: anchor.height
       },
-      minDistance: this.offices.length
-        ? GAME_CONFIG.spawning.officeMinDistance
-        : 0,
+      minDistance: this.offices.length ? SPAWNING_CONFIG.officeMinDistance : 0,
       maxDistance:
-        this.offices.length + GAME_CONFIG.spawning.officeMaxDistanceOffset,
+        this.offices.length + SPAWNING_CONFIG.officeMaxDistanceOffset,
       maxNumAttempts: 40
     });
     if (!pos) return false;
@@ -684,11 +689,11 @@ export class Game {
     needyness: number;
     numDemand: number;
   } {
-    return GAME_CONFIG.building.office[destination];
+    return BUILDING_CONFIG.office[destination];
   }
 
   private tryUpgradeOffice(office: Building): boolean {
-    const cfg = GAME_CONFIG.building.office[office.destination];
+    const cfg = BUILDING_CONFIG.office[office.destination];
     if (office.numDemand >= cfg.maxDemand) return false;
     office.numDemand += cfg.upgradeIncrement;
     this.ensureOfficeDemand(office);
@@ -703,7 +708,7 @@ export class Game {
       anchor: { x: office.x, y: office.y, width: 1, height: 1 },
       minDistance: 3,
       maxDistance:
-        2 + this.offices.length * GAME_CONFIG.spawning.houseMaxDistanceFactor,
+        2 + this.offices.length * SPAWNING_CONFIG.houseMaxDistanceFactor,
       maxNumAttempts: 40
     });
     if (!pos) return false;
@@ -722,10 +727,10 @@ export class Game {
 
     const pos = this.getRandomPosition({
       anchor: { x: friendHouse.x, y: friendHouse.y, width: 1, height: 1 },
-      minDistance: GAME_CONFIG.spawning.houseMinDistance,
+      minDistance: SPAWNING_CONFIG.houseMinDistance,
       maxDistance: Math.max(
         2,
-        this.offices.length * GAME_CONFIG.spawning.houseMaxDistanceFactor
+        this.offices.length * SPAWNING_CONFIG.houseMaxDistanceFactor
       ),
       maxNumAttempts: 40
     });
@@ -772,7 +777,7 @@ export class Game {
     this.paths.push({ a: { x, y }, b: entrance });
     this.pathsChanged = true;
 
-    for (let p = 0; p < GAME_CONFIG.building.house.residents; p += 1) {
+    for (let p = 0; p < BUILDING_CONFIG.house.residents; p += 1) {
       const varianceX = this.rng.next() * 0.5 - 0.25;
       const varianceY = this.rng.next() * 0.5 - 0.25;
       this.workers.push(
@@ -791,7 +796,7 @@ export class Game {
       const residents = this.workers.filter((v) => v.homeHouseId === house.id);
       const missing = Math.max(
         0,
-        GAME_CONFIG.building.house.residents - residents.length
+        BUILDING_CONFIG.house.residents - residents.length
       );
       for (let i = 0; i < missing; i += 1) {
         const varianceX = this.rng.next() * 0.5 - 0.25;
@@ -963,23 +968,23 @@ export class Game {
     switch (destination) {
       case 'yellow': {
         dimensions = {
-          width: GAME_CONFIG.building.office.yellow.size.width,
-          height: GAME_CONFIG.building.office.yellow.size.height
+          width: BUILDING_CONFIG.office.yellow.size.width,
+          height: BUILDING_CONFIG.office.yellow.size.height
         };
         break;
       }
       case 'blue': {
         dimensions = {
-          width: GAME_CONFIG.building.office.blue.size.width,
-          height: GAME_CONFIG.building.office.blue.size.height
+          width: BUILDING_CONFIG.office.blue.size.width,
+          height: BUILDING_CONFIG.office.blue.size.height
         };
         break;
       }
       // default to red
       default: {
         dimensions = {
-          width: GAME_CONFIG.building.office.red.size.width,
-          height: GAME_CONFIG.building.office.red.size.height
+          width: BUILDING_CONFIG.office.red.size.width,
+          height: BUILDING_CONFIG.office.red.size.height
         };
         break;
       }

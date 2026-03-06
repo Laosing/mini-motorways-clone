@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Game } from '@core/Game';
+import { BUILDING_CONFIG } from '@core/config';
 
 describe('Office Demand System', () => {
   it('initializes office demand timers', () => {
@@ -9,8 +10,10 @@ describe('Office Demand System', () => {
 
     const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
 
-    expect(office.numDemand).toBe(3);
-    expect(office.demandTimers.length).toBe(3);
+    expect(office.numDemand).toBe(BUILDING_CONFIG.office.red.numDemand);
+    expect(office.demandTimers.length).toBe(
+      BUILDING_CONFIG.office.red.numDemand
+    );
   });
 
   it('decrements active demand timers', () => {
@@ -159,7 +162,7 @@ describe('Office Demand System', () => {
 
     game.updateOfficeDemand(0);
 
-    expect(redOffice.numIssues).toBe(3);
+    expect(redOffice.numIssues).toBe(BUILDING_CONFIG.office.red.numDemand);
     expect(blueOffice.numIssues).toBe(0);
     expect(yellowOffice.numIssues).toBe(5);
   });
@@ -171,8 +174,10 @@ describe('Office Demand System', () => {
 
     const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
 
-    expect(office.numDemand).toBe(3);
-    expect(office.demandTimers.length).toBe(3);
+    expect(office.numDemand).toBe(BUILDING_CONFIG.office.red.numDemand);
+    expect(office.demandTimers.length).toBe(
+      BUILDING_CONFIG.office.red.numDemand
+    );
 
     office.numDemand = 5;
     game.updateOfficeDemand(0);

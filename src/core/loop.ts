@@ -1,6 +1,5 @@
 import * as LJS from 'littlejsengine';
-import { COLORS } from './colors';
-import { FIXED_TIMESTEP } from './config';
+import { FIXED_TIMESTEP, ENGINE_CONFIG, COLOR_CONFIG } from './config';
 import type { Game } from './Game';
 
 export function wireEngine(game: Game): void {
@@ -10,8 +9,10 @@ export function wireEngine(game: Game): void {
     LJS.setShowSplashScreen(false);
     LJS.setCanvasPixelated(false);
     // Fixed resolution to prevent stretching and ensure 1:1 aspect ratio for paths/units
-    LJS.setCanvasFixedSize(LJS.vec2(1280, 720));
-    LJS.setCanvasClearColor(new LJS.Color().setHex(COLORS.grass));
+    LJS.setCanvasFixedSize(
+      LJS.vec2(ENGINE_CONFIG.canvasWidth, ENGINE_CONFIG.canvasHeight)
+    );
+    LJS.setCanvasClearColor(new LJS.Color().setHex(COLOR_CONFIG.grass));
     game.init();
   }
 

@@ -2,20 +2,20 @@ import * as LJS from 'littlejsengine';
 import type { Entity } from './Entity';
 import type { DestinationType } from './Building';
 import { COLOR_RESOURCES } from '@core/colors';
-import { GAME_CONFIG } from '@core/config';
+import { WORKER_CONFIG } from '@core/config';
 
 export type WorkerTask = 'idle' | 'toOffice' | 'atOffice' | 'toHome';
 
 export class Worker extends LJS.EngineObject implements Entity {
   readonly id: string;
   readonly type = 'worker';
-  speed: number = GAME_CONFIG.worker.speed;
+  speed: number = WORKER_CONFIG.speed;
   task: WorkerTask = 'idle';
   homeHouseId: string;
   destinationType: DestinationType;
   target: { x: number; y: number } | null = null;
   path: Array<{ x: number; y: number }> = [];
-  waitTimer: number = GAME_CONFIG.worker.waitTimer;
+  waitTimer: number = WORKER_CONFIG.waitTimer;
   assignedOfficeId: string | null = null;
   originalRouteLength: number = 0;
   lastReachedPos: { x: number; y: number } | null = null;
@@ -29,11 +29,11 @@ export class Worker extends LJS.EngineObject implements Entity {
     destinationType: DestinationType
   ) {
     // Roughly 0.35 cells diameter matches SVG r=1.35
-    super(pos, LJS.vec2(GAME_CONFIG.worker.size, GAME_CONFIG.worker.size));
+    super(pos, LJS.vec2(WORKER_CONFIG.size, WORKER_CONFIG.size));
     this.id = id;
     this.homeHouseId = homeHouseId;
     this.destinationType = destinationType;
-    this.renderOrder = GAME_CONFIG.worker.renderOrder; // Above everything else
+    this.renderOrder = WORKER_CONFIG.renderOrder; // Above everything else
   }
 
   // Compatibility getters/setters for existing systems

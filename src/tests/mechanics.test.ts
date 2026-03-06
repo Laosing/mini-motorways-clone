@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { Game } from '@core/Game';
-import * as LJS from 'littlejsengine';
+import { GAMEPLAY_CONFIG } from '@core/config';
 
 // Mock LittleJS globals and localStorage for Node testing
 const mockLocalStorage: Record<string, string> = {};
@@ -59,7 +59,7 @@ describe('Game Mechanics & Persistence', () => {
     game.startPlay();
 
     const initialDay = game.day;
-    const dayLength = 20; // GAME_CONFIG.dayLengthSeconds
+    const dayLength = GAMEPLAY_CONFIG.dayLengthSeconds;
 
     // Fast forward exactly one day
     game.update(dayLength);

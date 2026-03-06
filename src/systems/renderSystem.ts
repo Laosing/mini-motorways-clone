@@ -1,8 +1,9 @@
 import type { Game } from '@core/Game';
 import * as LJS from 'littlejsengine';
-import { COLORS, COLOR_RESOURCES } from '@core/colors';
+import { COLOR_RESOURCES } from '@core/colors';
 import { createRoundaboutEdges } from './pathNetwork';
 import { isValidRoundaboutPlacement } from './placementSystem';
+import { COLOR_CONFIG } from '@core/config';
 
 let terrainLayer: LJS.TileLayer | undefined;
 let mainTileInfo: LJS.TileInfo | undefined;
@@ -19,7 +20,7 @@ function ensureLayers(game: Game) {
   canvas.height = 128;
   const ctx = canvas.getContext('2d')!;
 
-  ctx.fillStyle = COLORS.grass;
+  ctx.fillStyle = COLOR_CONFIG.grass;
   ctx.fillRect(0, 0, s, s);
   ctx.strokeStyle = 'rgba(0,0,0,0.02)';
   ctx.lineWidth = 1;
@@ -29,7 +30,7 @@ function ensureLayers(game: Game) {
   for (let mask = 1; mask < 16; mask++) {
     const tx = (mask % 8) * s;
     const ty = Math.floor(mask / 8) * s;
-    ctx.fillStyle = COLORS.grass;
+    ctx.fillStyle = COLOR_CONFIG.grass;
     ctx.fillRect(tx, ty, s, s);
   }
 
@@ -139,7 +140,7 @@ export function drawWorld(game: Game): void {
 
   // --- PATH RENDERING (FUSED MULTI-PASS) ---
   const pWidth = 0.52;
-  const border = COLORS.outlineWidth;
+  const border = COLOR_CONFIG.outlineWidth;
   const pColor = COLOR_RESOURCES.path;
 
   // 1. MAIN NETWORK
