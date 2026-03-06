@@ -32,10 +32,6 @@ interface SpawnPositionOptions {
   maxNumAttempts?: number;
 }
 
-interface LegacyAnimal {
-  demandTimer: number;
-}
-
 export interface BuildingSnapshot {
   id: string;
   role: StructureRole;
@@ -55,8 +51,6 @@ export interface BuildingSnapshot {
   numIssues: number;
   needyness: number;
   numDemand: number;
-  // Backward compatibility with old save formats
-  animals?: LegacyAnimal[];
 }
 
 export interface WorkerSnapshot {
