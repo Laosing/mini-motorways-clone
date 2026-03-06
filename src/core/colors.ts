@@ -1,19 +1,20 @@
 import * as LJS from 'littlejsengine';
+import { GAME_CONFIG } from './config';
 
 export const COLORS = {
-  grass: '#E8E7D1',
-  path: '#333333',
-  house: '#FFFFFF',
-  red: '#F15B5B', // Vibrant Pastel Red
-  blue: '#4DA1FF', // Vibrant Pastel Blue
-  yellow: '#FFD93D', // Vibrant Pastel Yellow
-  white: '#FFFFFF',
-  black: '#1A1A1A',
-  ui: '#333333',
-  grid: '#0000000D', // 0.05 alpha
-  shade: '#00000026', // 0.15 alpha
-  shade2: '#00000040', // 0.25 alpha
-  outlineWidth: 0.12
+  grass: GAME_CONFIG.colors.grass,
+  path: GAME_CONFIG.colors.path,
+  house: GAME_CONFIG.colors.house,
+  red: GAME_CONFIG.colors.red,
+  blue: GAME_CONFIG.colors.blue,
+  yellow: GAME_CONFIG.colors.yellow,
+  white: GAME_CONFIG.colors.white,
+  black: GAME_CONFIG.colors.black,
+  ui: GAME_CONFIG.colors.ui,
+  grid: GAME_CONFIG.colors.grid,
+  shade: GAME_CONFIG.colors.shade,
+  shade2: GAME_CONFIG.colors.shade2,
+  outlineWidth: GAME_CONFIG.colors.outlineWidth
 } as const;
 
 // Cached Color objects to avoid garbage collection pressure

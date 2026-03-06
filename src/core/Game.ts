@@ -20,7 +20,6 @@ import { loadSnapshot, saveNow } from '@systems/saveSystem';
 import { setupHUD, updateHUD } from '@ui/hud';
 import type { PathEdge, Roundabout } from '@systems/pathNetwork';
 
-const SPAWNING_LOOP_LENGTH = 600;
 const TYPES: DestinationType[] = ['red', 'blue', 'yellow'];
 
 interface SpawnPositionOptions {
@@ -383,11 +382,7 @@ export class Game {
         b.numDemand
       );
       building.assignedWorkerIds = [...(b.assignedWorkerIds ?? [])];
-      building.demandTimers = b.demandTimers
-        ? [...b.demandTimers]
-        : b.animals
-          ? b.animals.map((anim) => anim.demandTimer)
-          : [];
+      building.demandTimers = b.demandTimers;
       building.active = b.active ?? true;
       building.demand = b.demand ?? 0;
       building.numIssues = b.numIssues ?? 0;
@@ -504,7 +499,7 @@ export class Game {
     if (!this.autoSpawningEnabled) return;
     let upgradedThisLoop = false;
 
-    if (this.updateCount % SPAWNING_LOOP_LENGTH === 0) {
+    if (this.updateCount % GAME_CONFIG.spawning.loopLength === 0) {
       this.updateRandomness1 = this.rng.int(0, 40);
       this.updateRandomness2 = this.rng.int(0, 40);
       this.updateRandomness3 = this.rng.int(0, 40);
@@ -514,7 +509,7 @@ export class Game {
     if (
       this.updateCount === 0 ||
       (this.updateCount > 200 &&
-        this.updateCount % SPAWNING_LOOP_LENGTH ===
+        this.updateCount % GAME_CONFIG.spawning.loopLength ===
           (this.offices.length ? this.updateRandomness1 : 0))
     ) {
       if (
@@ -535,7 +530,7 @@ export class Game {
     }
 
     if (
-      this.updateCount % SPAWNING_LOOP_LENGTH ===
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
       100 + (this.offices.length > 1 ? this.updateRandomness2 : 0)
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
@@ -544,7 +539,8 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 120 + this.updateRandomness2
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+        120 + this.updateRandomness2
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
       return;
@@ -552,14 +548,15 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 140 + this.updateRandomness2
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+        140 + this.updateRandomness2
     ) {
       this.houseFailed = !this.trySpawnFirstHouseOfLoop();
       return;
     }
 
     if (
-      this.updateCount % SPAWNING_LOOP_LENGTH ===
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
       300 + this.updateRandomness3
     ) {
       this.houseFailed = !this.trySpawnSecondHouseOfLoop();
@@ -568,7 +565,8 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 320 + this.updateRandomness3
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+        320 + this.updateRandomness3
     ) {
       this.houseFailed = !this.trySpawnSecondHouseOfLoop();
       return;
@@ -576,7 +574,8 @@ export class Game {
 
     if (
       this.houseFailed &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 340 + this.updateRandomness3
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+        340 + this.updateRandomness3
     ) {
       this.houseFailed = !this.trySpawnSecondHouseOfLoop();
       return;
@@ -584,7 +583,8 @@ export class Game {
 
     if (
       this.updateCount > 4000 &&
-      this.updateCount % SPAWNING_LOOP_LENGTH === 500 + this.updateRandomness4
+      this.updateCount % GAME_CONFIG.spawning.loopLength ===
+        500 + this.updateRandomness4
     ) {
       if (!this.trySpawnOffice(this.getRandomNewType())) {
         for (const office of this.offices) {
@@ -616,8 +616,11 @@ export class Game {
         width: anchor.width,
         height: anchor.height
       },
-      minDistance: this.offices.length ? 2 : 0,
-      maxDistance: this.offices.length + 3,
+      minDistance: this.offices.length
+        ? GAME_CONFIG.spawning.officeMinDistance
+        : 0,
+      maxDistance:
+        this.offices.length + GAME_CONFIG.spawning.officeMaxDistanceOffset,
       maxNumAttempts: 40
     });
     if (!pos) return false;
@@ -681,26 +684,13 @@ export class Game {
     needyness: number;
     numDemand: number;
   } {
-    if (destination === 'red') return { needyness: 225, numDemand: 3 };
-    if (destination === 'blue') return { needyness: 240, numDemand: 3 };
-    return { needyness: 1300, numDemand: 5 };
+    return GAME_CONFIG.building.office[destination];
   }
 
   private tryUpgradeOffice(office: Building): boolean {
-    if (office.destination === 'red') {
-      if (office.numDemand >= 5) return false;
-      office.numDemand += 2;
-      this.ensureOfficeDemand(office);
-      return true;
-    }
-    if (office.destination === 'blue') {
-      if (office.numDemand >= 7) return false;
-      office.numDemand += 1;
-      this.ensureOfficeDemand(office);
-      return true;
-    }
-    if (office.numDemand >= 9) return false;
-    office.numDemand += 4;
+    const cfg = GAME_CONFIG.building.office[office.destination];
+    if (office.numDemand >= cfg.maxDemand) return false;
+    office.numDemand += cfg.upgradeIncrement;
     this.ensureOfficeDemand(office);
     return true;
   }
@@ -712,7 +702,8 @@ export class Game {
     const pos = this.getRandomPosition({
       anchor: { x: office.x, y: office.y, width: 1, height: 1 },
       minDistance: 3,
-      maxDistance: 2 + this.offices.length,
+      maxDistance:
+        2 + this.offices.length * GAME_CONFIG.spawning.houseMaxDistanceFactor,
       maxNumAttempts: 40
     });
     if (!pos) return false;
@@ -731,8 +722,11 @@ export class Game {
 
     const pos = this.getRandomPosition({
       anchor: { x: friendHouse.x, y: friendHouse.y, width: 1, height: 1 },
-      minDistance: 1,
-      maxDistance: Math.max(2, this.offices.length),
+      minDistance: GAME_CONFIG.spawning.houseMinDistance,
+      maxDistance: Math.max(
+        2,
+        this.offices.length * GAME_CONFIG.spawning.houseMaxDistanceFactor
+      ),
       maxNumAttempts: 40
     });
     if (!pos) return false;
@@ -778,7 +772,7 @@ export class Game {
     this.paths.push({ a: { x, y }, b: entrance });
     this.pathsChanged = true;
 
-    for (let p = 0; p < 2; p += 1) {
+    for (let p = 0; p < GAME_CONFIG.building.house.residents; p += 1) {
       const varianceX = this.rng.next() * 0.5 - 0.25;
       const varianceY = this.rng.next() * 0.5 - 0.25;
       this.workers.push(
@@ -795,7 +789,10 @@ export class Game {
   private ensureTwoWorkersPerHouse(): void {
     for (const house of this.houses) {
       const residents = this.workers.filter((v) => v.homeHouseId === house.id);
-      const missing = Math.max(0, 2 - residents.length);
+      const missing = Math.max(
+        0,
+        GAME_CONFIG.building.house.residents - residents.length
+      );
       for (let i = 0; i < missing; i += 1) {
         const varianceX = this.rng.next() * 0.5 - 0.25;
         const varianceY = this.rng.next() * 0.5 - 0.25;

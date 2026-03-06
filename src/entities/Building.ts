@@ -1,6 +1,7 @@
 import * as LJS from 'littlejsengine';
 import type { Entity } from './Entity';
 import { COLORS, COLOR_RESOURCES } from '@core/colors';
+import { GAME_CONFIG } from '@core/config';
 
 export type DestinationType = 'red' | 'blue' | 'yellow';
 export type StructureRole = 'house' | 'office';
@@ -13,10 +14,14 @@ export class Building extends LJS.EngineObject implements Entity {
   readonly width: number;
   readonly height: number;
   active: boolean = true;
+  // Total demand value (sum of all active demand timers)
   demand: number = 0;
+  // Base demand per active demand slot
   needyness: number = 0;
+  // Number of demand slots
   numDemand: number = 0;
-  numIssues: number = 0; // This will now represent active demand pins
+  // Number of active demand pins
+  numIssues: number = 0;
   assignedWorkerIds: string[] = [];
   readonly entrance: { x: number; y: number };
   readonly entryTile: { x: number; y: number };
@@ -48,11 +53,12 @@ export class Building extends LJS.EngineObject implements Entity {
     this.height = size.y;
     this.needyness = needyness;
     this.numDemand = numDemand;
-    this.renderOrder = 5; // Above terrain, below workers
+    this.renderOrder = GAME_CONFIG.building.renderOrder; // Above terrain, below workers
 
     // Initialize timers for potential demand "slots"
     for (let i = 0; i < numDemand; i++) {
-      this._demandTimers.push(Math.random() * 10 + 5);
+      const { min, max } = GAME_CONFIG.building.initialDemandTimerRange;
+      this._demandTimers.push(Math.random() * (max - min) + min);
     }
   }
 
@@ -162,8 +168,8 @@ export class Building extends LJS.EngineObject implements Entity {
     if (this.numIssues <= 0) return;
 
     const color = COLOR_RESOURCES.black; // Demand pins are dark in MM
-    const pinSize = 0.1;
-    const spacing = 0.22;
+    const pinSize = GAME_CONFIG.demand.pinSize;
+    const spacing = GAME_CONFIG.demand.pinSpacing;
     const pinsPerRow = Math.floor((this.width - 0.3) / spacing);
 
     for (let i = 0; i < this.numIssues; i++) {

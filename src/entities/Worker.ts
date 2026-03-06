@@ -2,13 +2,14 @@ import * as LJS from 'littlejsengine';
 import type { Entity } from './Entity';
 import type { DestinationType } from './Building';
 import { COLOR_RESOURCES } from '@core/colors';
+import { GAME_CONFIG } from '@core/config';
 
 export type WorkerTask = 'idle' | 'toOffice' | 'atOffice' | 'toHome';
 
 export class Worker extends LJS.EngineObject implements Entity {
   readonly id: string;
   readonly type = 'worker';
-  speed: number = 2;
+  speed: number = GAME_CONFIG.worker.speed;
   task: WorkerTask = 'idle';
   homeHouseId: string;
   destinationType: DestinationType;
@@ -28,11 +29,11 @@ export class Worker extends LJS.EngineObject implements Entity {
     destinationType: DestinationType
   ) {
     // Roughly 0.35 cells diameter matches SVG r=1.35
-    super(pos, LJS.vec2(0.35, 0.35));
+    super(pos, LJS.vec2(GAME_CONFIG.worker.size, GAME_CONFIG.worker.size));
     this.id = id;
     this.homeHouseId = homeHouseId;
     this.destinationType = destinationType;
-    this.renderOrder = 20; // Above everything else
+    this.renderOrder = GAME_CONFIG.worker.renderOrder; // Above everything else
   }
 
   // Compatibility getters/setters for existing systems
