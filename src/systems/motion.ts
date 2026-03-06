@@ -227,7 +227,7 @@ export function resolveBodyOverlapsSingle(
       ny = dy / dist;
     }
 
-    const pushAmount = (minDistance - dist) * 0.1; // Softer push
+    const pushAmount = (minDistance - dist) * 0.15; // Slightly stronger push (was 0.1)
     body.x += nx * pushAmount;
     body.y += ny * pushAmount;
     other.x -= nx * pushAmount;

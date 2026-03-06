@@ -47,7 +47,8 @@ export function setupHUD(game: Game): void {
   roundaboutBtn.textContent = '↻ Roundabout';
   roundaboutBtn.title = 'Toggle roundabout tool (T)';
   roundaboutBtn.onclick = () => {
-    game.currentTool = game.currentTool === 'roundabout' ? 'road' : 'roundabout';
+    game.currentTool =
+      game.currentTool === 'roundabout' ? 'road' : 'roundabout';
     updateRoundaboutButtonStyle(roundaboutBtn, game.currentTool);
   };
   buttonGroup.appendChild(roundaboutBtn);
@@ -67,7 +68,10 @@ export function setupHUD(game: Game): void {
   updateHUD(game);
 }
 
-function updateRoundaboutButtonStyle(btn: HTMLButtonElement, tool: string): void {
+function updateRoundaboutButtonStyle(
+  btn: HTMLButtonElement,
+  tool: string
+): void {
   if (tool === 'roundabout') {
     btn.style.backgroundColor = '#4a9eff';
     btn.style.color = 'white';
@@ -83,7 +87,7 @@ export function updateHUD(game: Game): void {
   if (!hudEl) return;
 
   hudEl.innerHTML = `
-    <div style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #111;">Kingdom Management</div>
+    <div style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #111;">Game Stats</div>
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
       <span>Day: <strong>${game.day}</strong></span>
       <span>Trips: <strong>${game.servedTrips}</strong></span>

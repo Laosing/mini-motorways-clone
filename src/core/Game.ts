@@ -958,9 +958,41 @@ export class Game {
     width: number;
     height: number;
   } {
-    if (destination === 'yellow') return { width: 2, height: 2 };
-    const portrait = this.rng.next() > 0.5;
-    return portrait ? { width: 2, height: 3 } : { width: 3, height: 2 };
+    const shouldRotate = this.rng.next() > 0.5;
+    let dimensions = { width: 0, height: 0 };
+    switch (destination) {
+      case 'yellow': {
+        dimensions = {
+          width: GAME_CONFIG.building.office.yellow.size.width,
+          height: GAME_CONFIG.building.office.yellow.size.height
+        };
+        break;
+      }
+      case 'blue': {
+        dimensions = {
+          width: GAME_CONFIG.building.office.blue.size.width,
+          height: GAME_CONFIG.building.office.blue.size.height
+        };
+        break;
+      }
+      // default to red
+      default: {
+        dimensions = {
+          width: GAME_CONFIG.building.office.red.size.width,
+          height: GAME_CONFIG.building.office.red.size.height
+        };
+        break;
+      }
+    }
+
+    if (shouldRotate) {
+      [dimensions.width, dimensions.height] = [
+        dimensions.height,
+        dimensions.width
+      ];
+    }
+
+    return dimensions;
   }
 
   private backfillStructureSizes(): void {

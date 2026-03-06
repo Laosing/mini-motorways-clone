@@ -32,22 +32,34 @@ export const GAME_CONFIG = {
     },
     office: {
       red: {
-        needyness: 225,
-        numDemand: 3,
+        needyness: 800,
+        numDemand: 5,
         upgradeIncrement: 2,
-        maxDemand: 5
+        maxDemand: 7,
+        size: {
+          width: 2,
+          height: 3
+        }
       },
       blue: {
-        needyness: 240,
-        numDemand: 3,
-        upgradeIncrement: 1,
-        maxDemand: 7
+        needyness: 1000,
+        numDemand: 5,
+        upgradeIncrement: 3,
+        maxDemand: 7,
+        size: {
+          width: 2,
+          height: 3
+        }
       },
       yellow: {
         needyness: 1300,
         numDemand: 5,
         upgradeIncrement: 4,
-        maxDemand: 9
+        maxDemand: 9,
+        size: {
+          width: 2,
+          height: 3
+        }
       }
     }
   },

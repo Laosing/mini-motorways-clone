@@ -101,12 +101,13 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
   _v2.set(worker.x, worker.y);
 
   // Proactively skip nodes we are already basically touching
+  // Increase threshold slightly if we have a lot of momentum or are being pushed
+  const skipThresholdSq = 0.16; // 0.4 * 0.4
   while (worker.path.length > 1) {
     const node = worker.path[0];
     const dx = _v2.x - node.x;
     const dy = _v2.y - node.y;
-    if (dx * dx + dy * dy < 0.1225) {
-      // 0.35 * 0.35
+    if (dx * dx + dy * dy < skipThresholdSq) {
       worker.path.shift();
     } else {
       break;
@@ -144,7 +145,6 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
   _v4.set(worker.lastReachedPos.x, worker.lastReachedPos.y); // prev
   const laneOffset = getLaneOffsetVector(_v4, _v3, LANE_OFFSET);
 
-  // Use _v1 (from getLookaheadTarget logic partially)
   const lookaheadTarget = getLookaheadTarget(_v2, worker.path);
 
   // Reuse _v4 for steerTarget
@@ -221,9 +221,37 @@ const _activeOthersBuffer: Worker[] = [];
 
 function applyWorkerCrowdAvoidance(game: Game, worker: Worker): void {
   // If we've been stuck for several seconds, phase through others to resolve the jam
-  if (worker.stuckTimer > 4.0) return;
+  if (worker.stuckTimer > 3.0) return;
+
+  const targetNode = worker.path[0];
+  if (!targetNode) {
+    getNearbyWorkers(game, worker.x, worker.y, AVOID_DISTANCE, _nearbyBuffer);
+    applyCrowdAvoidance(worker, _nearbyBuffer, CROWD_CFG);
+    return;
+  }
+
+  // Adaptive avoidance: scale down avoidance logic as we get closer to the node
+  // This prevents workers from being pushed away from the node they need to reach
+  const dx = targetNode.x - worker.x;
+  const dy = targetNode.y - worker.y;
+  const distToNodeSq = dx * dx + dy * dy;
+
+  // If we are within 0.8 cells of the node, start tapering off avoidance
+  const taperStart = 0.8 * 0.8;
+  const taperEnd = 0.2 * 0.2;
+  const avoidanceMult = Math.max(
+    0.2,
+    Math.min(1, (distToNodeSq - taperEnd) / (taperStart - taperEnd))
+  );
+
+  const adaptiveCfg = {
+    ...CROWD_CFG,
+    slowdownStrength: CROWD_CFG.slowdownStrength * avoidanceMult,
+    turniness: CROWD_CFG.turniness * avoidanceMult
+  };
+
   getNearbyWorkers(game, worker.x, worker.y, AVOID_DISTANCE, _nearbyBuffer);
-  applyCrowdAvoidance(worker, _nearbyBuffer, CROWD_CFG);
+  applyCrowdAvoidance(worker, _nearbyBuffer, adaptiveCfg);
 }
 
 function assignPeopleToOfficeIssues(game: Game): void {
@@ -453,8 +481,8 @@ export function updateWorkers(game: Game, dt: number): void {
         worker.lastPosForStuck = { x: worker.x, y: worker.y };
       }
 
-      if (worker.stuckTimer > 2.0) {
-        // STATIONARY for 2s: Disable fine-grained avoidance to allow better steering
+      if (worker.stuckTimer > 1.5) {
+        // STATIONARY for 1.5s (reduced from 2s)
         if (worker.path.length > 0) {
           const node = worker.path[0];
           const nx = node.x - worker.x;
@@ -463,19 +491,19 @@ export function updateWorkers(game: Game, dt: number): void {
 
           if (mag > 0.001) {
             // Strong nudge toward target node
-            worker.dx += (nx / mag) * 0.05 * dt;
-            worker.dy += (ny / mag) * 0.05 * dt;
+            worker.dx += (nx / mag) * 0.08 * dt;
+            worker.dy += (ny / mag) * 0.08 * dt;
           }
 
-          // STATIONARY for 8s: Teleport to the current node to bypass physical blocks
-          if (worker.stuckTimer > 8.0) {
+          // STATIONARY for 5s (reduced from 8s): Teleport to the current node
+          if (worker.stuckTimer > 5.0) {
             worker.x = node.x;
             worker.y = node.y;
-            worker.stuckTimer = 1.0; // Reset slightly to prevent instant double teleport
+            worker.stuckTimer = 1.0;
           }
 
-          // STATIONARY for 12s: Something is fundamentally broken, skip this node
-          if (worker.stuckTimer > 12.0) {
+          // STATIONARY for 8s (reduced from 12s): Skip this node
+          if (worker.stuckTimer > 8.0) {
             worker.path.shift();
             worker.stuckTimer = 0;
           }

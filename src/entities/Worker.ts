@@ -15,7 +15,7 @@ export class Worker extends LJS.EngineObject implements Entity {
   destinationType: DestinationType;
   target: { x: number; y: number } | null = null;
   path: Array<{ x: number; y: number }> = [];
-  waitTimer: number = 0;
+  waitTimer: number = GAME_CONFIG.worker.waitTimer;
   assignedOfficeId: string | null = null;
   originalRouteLength: number = 0;
   lastReachedPos: { x: number; y: number } | null = null;
