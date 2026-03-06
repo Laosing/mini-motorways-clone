@@ -18,7 +18,7 @@ import { handleInput } from '@systems/inputSystem';
 import { updateWorkers } from '@systems/taskSystem';
 import { loadSnapshot, saveNow } from '@systems/saveSystem';
 import { setupHUD, updateHUD } from '@ui/hud';
-import type { PathEdge } from '@systems/pathNetwork';
+import type { PathEdge, Roundabout } from '@systems/pathNetwork';
 
 const SPAWNING_LOOP_LENGTH = 600;
 const TYPES: DestinationType[] = ['red', 'blue', 'yellow'];
@@ -84,10 +84,12 @@ export interface Snapshot {
   buildings: BuildingSnapshot[];
   workers: WorkerSnapshot[];
   paths: PathEdge[];
+  roundabouts?: Roundabout[];
   seed: number;
   servedTrips: number;
   updateCount: number;
   autoSpawningEnabled?: boolean;
+  currentTool?: 'road' | 'roundabout';
 }
 
 export class Game {
@@ -104,6 +106,7 @@ export class Game {
   statusText = '';
   cursorTile: { x: number; y: number } | null = null;
   dragStartTile: { x: number; y: number } | null = null;
+  dragTool: 'road' | 'roundabout' | null = null;
   pathPreview: PathEdge[] = [];
   servedTrips = 0;
   updateCount = 0;
@@ -114,6 +117,8 @@ export class Game {
   private houseFailed = false;
   autoSpawningEnabled = true;
   pathsChanged = true;
+  currentTool: 'road' | 'roundabout' = 'road';
+  roundabouts: Roundabout[] = [];
 
   constructor(seed = Date.now() >>> 0) {
     this.rng = new SeededRng(seed);
@@ -324,11 +329,21 @@ export class Game {
         lastReachedPos: v.lastReachedPos ? { ...v.lastReachedPos } : null,
         waitTimer: v.waitTimer
       })),
-      paths: this.paths.map((p) => ({ a: { ...p.a }, b: { ...p.b } })),
+      paths: this.paths.map((p) => ({
+        a: { ...p.a },
+        b: { ...p.b },
+        direction: p.direction,
+        roundaboutId: p.roundaboutId
+      })),
+      roundabouts: this.roundabouts.map((rb) => ({
+        ...rb,
+        edges: rb.edges.map((e) => ({ ...e }))
+      })),
       seed: this.rng.getSeed(),
       servedTrips: this.servedTrips,
       updateCount: this.updateCount,
-      autoSpawningEnabled: this.autoSpawningEnabled
+      autoSpawningEnabled: this.autoSpawningEnabled,
+      currentTool: this.currentTool
     };
   }
 
@@ -422,8 +437,15 @@ export class Game {
     });
     this.paths = (snapshot.paths ?? []).map((p) => ({
       a: { ...p.a },
-      b: { ...p.b }
+      b: { ...p.b },
+      direction: p.direction,
+      roundaboutId: p.roundaboutId
     }));
+    this.roundabouts = (snapshot.roundabouts ?? []).map((rb) => ({
+      ...rb,
+      edges: rb.edges.map((e) => ({ ...e }))
+    }));
+    this.currentTool = snapshot.currentTool ?? 'road';
     this.servedTrips = snapshot.servedTrips ?? 0;
     this.updateCount = snapshot.updateCount ?? 0;
     this.autoSpawningEnabled = snapshot.autoSpawningEnabled ?? true;
@@ -467,6 +489,21 @@ export class Game {
     office.numIssues = 0;
     office.demand = 0;
     return false;
+  }
+
+  /**
+   * Invalidate all active worker paths, forcing them to recalculate.
+   * Called when roundabouts are placed or removed to ensure workers use updated paths.
+   */
+  public invalidateWorkerPaths(): void {
+    for (const worker of this.workers) {
+      worker.path = [];
+      worker.lastReachedPos = null;
+      // Keep the task and target but force recalculation
+      if (worker.task === 'toOffice' || worker.task === 'toHome') {
+        // worker.target is preserved to allow re-pathing
+      }
+    }
   }
 
   private spawnBySchedule(): void {

@@ -1,6 +1,8 @@
 import type { Game } from '@core/Game';
 import * as LJS from 'littlejsengine';
 import { COLORS, COLOR_RESOURCES } from '@core/colors';
+import { createRoundaboutEdges } from './pathNetwork';
+import { isValidRoundaboutPlacement } from './placementSystem';
 
 let terrainLayer: LJS.TileLayer | undefined;
 let mainTileInfo: LJS.TileInfo | undefined;
@@ -82,6 +84,38 @@ function drawPathPass(edges: any[], width: number, color: LJS.Color) {
   });
 }
 
+function drawRoundaboutArrow(
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): void {
+  const midX = (from.x + to.x) / 2;
+  const midY = (from.y + to.y) / 2;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const angle = Math.atan2(dy, dx);
+
+  const arrowSize = 0.15;
+
+  LJS.drawPoly(
+    [
+      LJS.vec2(
+        midX + Math.cos(angle) * arrowSize,
+        midY + Math.sin(angle) * arrowSize
+      ),
+      LJS.vec2(
+        midX + Math.cos(angle + 2.5) * arrowSize,
+        midY + Math.sin(angle + 2.5) * arrowSize
+      ),
+      LJS.vec2(
+        midX + Math.cos(angle - 2.5) * arrowSize,
+        midY + Math.sin(angle - 2.5) * arrowSize
+      )
+    ],
+    LJS.rgb(1, 1, 1)
+  );
+}
+
 export function drawWorld(game: Game): void {
   ensureLayers(game);
 
@@ -104,21 +138,54 @@ export function drawWorld(game: Game): void {
   }
 
   // --- PATH RENDERING (FUSED MULTI-PASS) ---
-  const pWidth = 0.52; // User preferred thickness
+  const pWidth = 0.52;
   const border = COLORS.outlineWidth;
   const pColor = COLOR_RESOURCES.path;
 
   // 1. MAIN NETWORK
-  // Draw entire white footprint
-  drawPathPass(game.paths, pWidth + border * 2, COLOR_RESOURCES.white);
-  // Draw entire dark network over it
-  drawPathPass(game.paths, pWidth, pColor);
+  // Draw normal paths first
+  const normalPaths = game.paths.filter(
+    (p) => p.roundaboutId === undefined || p.roundaboutId === null
+  );
+  drawPathPass(normalPaths, pWidth + border * 2, COLOR_RESOURCES.white);
+  drawPathPass(normalPaths, pWidth, pColor);
+
+  // Draw roundabout edges with arrows
+  const roundaboutEdges = game.paths.filter(
+    (p) => p.roundaboutId !== undefined && p.roundaboutId !== null
+  );
+  drawPathPass(roundaboutEdges, pWidth + border * 2, COLOR_RESOURCES.white);
+  drawPathPass(roundaboutEdges, pWidth, new LJS.Color(0.3, 0.4, 0.2));
+  for (const edge of roundaboutEdges) {
+    drawRoundaboutArrow(edge.a, edge.b);
+  }
 
   // 2. PREVIEW NETWORK (Ghost Paths)
   const previewWhite = new LJS.Color(1, 1, 1, 0.3);
   const previewFill = new LJS.Color(pColor.r, pColor.g, pColor.b, 0.15);
   drawPathPass(game.pathPreview, pWidth + border * 2, previewWhite);
   drawPathPass(game.pathPreview, pWidth, previewFill);
+
+  // Draw roundabout preview when tool is active
+  if (game.currentTool === 'roundabout' && game.cursorTile) {
+    const { x, y } = game.cursorTile;
+    const validation = isValidRoundaboutPlacement(game, x, y);
+
+    LJS.drawRect(
+      LJS.vec2(x, y),
+      LJS.vec2(3, 3),
+      validation.valid
+        ? new LJS.Color(0, 1, 0, 0.3)
+        : new LJS.Color(1, 0, 0, 0.3)
+    );
+
+    if (validation.valid) {
+      const previewEdges = createRoundaboutEdges({ x, y });
+      for (const edge of previewEdges) {
+        drawRoundaboutArrow(edge.a, edge.b);
+      }
+    }
+  }
 
   // Draw cursor
   if (

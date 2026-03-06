@@ -41,6 +41,17 @@ export function setupHUD(game: Game): void {
     updateHUD(game);
   });
 
+  const roundaboutBtn = document.createElement('button');
+  roundaboutBtn.id = 'btn-roundabout';
+  roundaboutBtn.className = 'game-btn';
+  roundaboutBtn.textContent = '↻ Roundabout';
+  roundaboutBtn.title = 'Toggle roundabout tool (T)';
+  roundaboutBtn.onclick = () => {
+    game.currentTool = game.currentTool === 'roundabout' ? 'road' : 'roundabout';
+    updateRoundaboutButtonStyle(roundaboutBtn, game.currentTool);
+  };
+  buttonGroup.appendChild(roundaboutBtn);
+
   createBtn('btn-save', 'Save Game', 'primary', () => {
     game.save();
     updateHUD(game);
@@ -54,6 +65,16 @@ export function setupHUD(game: Game): void {
   });
 
   updateHUD(game);
+}
+
+function updateRoundaboutButtonStyle(btn: HTMLButtonElement, tool: string): void {
+  if (tool === 'roundabout') {
+    btn.style.backgroundColor = '#4a9eff';
+    btn.style.color = 'white';
+  } else {
+    btn.style.backgroundColor = '';
+    btn.style.color = '';
+  }
 }
 
 export function setupBuildMenu(_game: Game): void {}
@@ -89,5 +110,13 @@ export function updateHUD(game: Game): void {
       ? 'Freeze Growth'
       : 'Resume Growth';
     spawnBtn.className = `game-btn ${game.autoSpawningEnabled ? 'warning' : 'primary'}`;
+  }
+
+  const roundaboutBtn = document.getElementById('btn-roundabout');
+  if (roundaboutBtn) {
+    updateRoundaboutButtonStyle(
+      roundaboutBtn as HTMLButtonElement,
+      game.currentTool
+    );
   }
 }

@@ -1,6 +1,11 @@
 import * as LJS from 'littlejsengine';
 import type { Game } from '@core/Game';
-import { areAdjacent, edgeKey } from './pathNetwork';
+import { areAdjacent, edgeKey, createRoundaboutEdges } from './pathNetwork';
+import {
+  isValidRoundaboutPlacement,
+  placeRoundabout,
+  removeRoundabout
+} from './placementSystem';
 
 function mouseToTile(game: Game): { x: number; y: number } | null {
   const wx = Math.floor(LJS.mousePos.x + 0.5);
@@ -139,77 +144,117 @@ export function handleInput(game: Game): void {
   if (LJS.keyWasPressed('Space')) game.togglePause();
   if (LJS.keyWasPressed('KeyS')) game.save();
   if (LJS.keyWasPressed('KeyR')) game.reset();
+  if (LJS.keyWasPressed('KeyT')) {
+    game.currentTool =
+      game.currentTool === 'roundabout' ? 'road' : 'roundabout';
+  }
 
   // Left Click Start
   if (LJS.mouseWasPressed(0) && game.cursorTile) {
     game.dragStartTile = game.cursorTile;
+    game.dragTool = game.currentTool;
   }
 
-  // Dragging
-  if (LJS.mouseIsDown(0) && game.dragStartTile) {
-    const nextNode = isPastPlacementThreshold(game.dragStartTile, LJS.mousePos);
-    const potentialNode = getPotentialNeighbor(
-      game.dragStartTile,
-      LJS.mousePos
-    );
+  // Roundabout placement (click to place)
+  if (
+    game.currentTool === 'roundabout' &&
+    game.dragTool === 'roundabout' &&
+    LJS.mouseWasReleased(0) &&
+    game.cursorTile
+  ) {
+    placeRoundabout(game, game.cursorTile.x, game.cursorTile.y);
+    game.dragStartTile = null;
+    game.dragTool = null;
+    game.pathPreview = [];
+    return;
+  }
 
-    if (potentialNode) {
-      game.pathPreview = [{ a: game.dragStartTile, b: potentialNode }];
-
-      // Pivot logic: if we are dragging FROM a house and NOT yet past the threshold,
-      // re-orient any existing single path segment to face the mouse.
-      const start = game.dragStartTile;
-      const isStartHouse = game.houses.some(
-        (h) => h.x === start.x && h.y === start.y
+  // Normal road drawing (only when not in roundabout mode)
+  if (game.currentTool === 'road') {
+    // Dragging
+    if (LJS.mouseIsDown(0) && game.dragStartTile) {
+      const nextNode = isPastPlacementThreshold(
+        game.dragStartTile,
+        LJS.mousePos
+      );
+      const potentialNode = getPotentialNeighbor(
+        game.dragStartTile,
+        LJS.mousePos
       );
 
-      if (isStartHouse && !nextNode) {
-        const connectedIdx = game.paths.findIndex(
-          (p) =>
-            (p.a.x === start.x && p.a.y === start.y) ||
-            (p.b.x === start.x && p.b.y === start.y)
+      if (potentialNode) {
+        game.pathPreview = [{ a: game.dragStartTile, b: potentialNode }];
+
+        // Pivot logic: if we are dragging FROM a house and NOT yet past the threshold,
+        // re-orient any existing single path segment to face the mouse.
+        const start = game.dragStartTile;
+        const isStartHouse = game.houses.some(
+          (h) => h.x === start.x && h.y === start.y
         );
 
-        if (connectedIdx !== -1) {
-          const path = game.paths[connectedIdx];
-          // Determine if this tile is occupied by something OTHER than a potential terminal end
-          const isOccupied = game.grid.get(
-            potentialNode.x,
-            potentialNode.y
-          )?.occupantId;
+        if (isStartHouse && !nextNode) {
+          const connectedIdx = game.paths.findIndex(
+            (p) =>
+              (p.a.x === start.x && p.a.y === start.y) ||
+              (p.b.x === start.x && p.b.y === start.y)
+          );
 
-          if (!isOccupied) {
-            // Update the end that isn't the house
-            if (path.a.x === start.x && path.a.y === start.y) {
-              path.b = { ...potentialNode };
-            } else {
-              path.a = { ...potentialNode };
+          if (connectedIdx !== -1) {
+            const path = game.paths[connectedIdx];
+            // Determine if this tile is occupied by something OTHER than a potential terminal end
+            const isOccupied = game.grid.get(
+              potentialNode.x,
+              potentialNode.y
+            )?.occupantId;
+
+            if (!isOccupied) {
+              // Update the end that isn't the house
+              if (path.a.x === start.x && path.a.y === start.y) {
+                path.b = { ...potentialNode };
+              } else {
+                path.a = { ...potentialNode };
+              }
+              game.pathsChanged = true;
             }
-            game.pathsChanged = true;
           }
         }
-      }
-    } else {
-      game.pathPreview = [];
-    }
-
-    if (nextNode) {
-      if (tryAddEdge(game, game.dragStartTile, nextNode)) {
-        game.dragStartTile = nextNode;
+      } else {
         game.pathPreview = [];
       }
-    }
-  }
 
-  // Left Click End
-  if (LJS.mouseWasReleased(0)) {
-    game.dragStartTile = null;
-    game.pathPreview = [];
+      if (nextNode) {
+        if (tryAddEdge(game, game.dragStartTile, nextNode)) {
+          game.dragStartTile = nextNode;
+          game.pathPreview = [];
+        }
+      }
+    }
+
+    // Left Click End
+    if (LJS.mouseWasReleased(0)) {
+      game.dragStartTile = null;
+      game.dragTool = null;
+      game.pathPreview = [];
+    }
+  } else {
+    // Clear drag state when in roundabout mode
+    if (LJS.mouseWasReleased(0)) {
+      game.dragStartTile = null;
+      game.dragTool = null;
+      game.pathPreview = [];
+    }
   }
 
   // Right Click Delete
   if (LJS.mouseIsDown(2) && game.cursorTile) {
     const t = game.cursorTile;
+
+    // Try to remove roundabout first
+    if (removeRoundabout(game, t.x, t.y)) {
+      return;
+    }
+
+    // Fall back to normal path deletion
     game.paths = game.paths.filter((p) => {
       const matches =
         (p.a.x === t.x && p.a.y === t.y) || (p.b.x === t.x && p.b.y === t.y);

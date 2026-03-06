@@ -243,19 +243,30 @@ function assignPeopleToOfficeIssues(game: Game): void {
     idleMap.set(key, list);
   }
 
-  // Build adjacency map for BFS (reuse this for all offices)
+  // Build reversed adjacency map for BFS (searching FROM office TO home)
   const adj = new Map<string, Array<{ x: number; y: number }>>();
   for (const edge of game.paths) {
     const ka = toKey(edge.a.x, edge.a.y);
     const kb = toKey(edge.b.x, edge.b.y);
 
-    const na = adj.get(ka) || [];
-    na.push(edge.b);
-    adj.set(ka, na);
+    // Check if this is a roundabout edge (has roundaboutId)
+    const isRoundaboutEdge =
+      edge.roundaboutId !== undefined && edge.roundaboutId !== null;
+    if (isRoundaboutEdge) {
+      // In reversed graph for BFS: if A -> B is the flow, we add B -> A
+      const neighbors = adj.get(kb) || [];
+      neighbors.push(edge.a);
+      adj.set(kb, neighbors);
+    } else {
+      // Bidirectional edges remain the same in reverse
+      const na = adj.get(ka) || [];
+      na.push(edge.b);
+      adj.set(ka, na);
 
-    const nb = adj.get(kb) || [];
-    nb.push(edge.a);
-    adj.set(kb, nb);
+      const nb = adj.get(kb) || [];
+      nb.push(edge.a);
+      adj.set(kb, nb);
+    }
   }
 
   for (const office of game.offices) {
@@ -378,12 +389,44 @@ function resolveWorkerOverlaps(game: Game): void {
 
 export function updateWorkers(game: Game, dt: number): void {
   updateSpatialGrid(game);
+
   // Only check for new assignments every 10 frames to save CPU
   if (game.updateCount % 10 === 0) {
     assignPeopleToOfficeIssues(game);
   }
 
   for (const worker of game.workers) {
+    // If worker's path was invalidated, try to re-find it
+    if (
+      (worker.task === 'toOffice' || worker.task === 'toHome') &&
+      worker.path.length === 0 &&
+      worker.target
+    ) {
+      // Are we already close enough to arrival?
+      const dx = worker.target.x - worker.x;
+      const dy = worker.target.y - worker.y;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq > CLOSE_ENOUGH_DEST * CLOSE_ENOUGH_DEST) {
+        // Stranded in the middle! Try to find a new route.
+        const route = findPathOnNetwork(
+          game.paths,
+          { x: Math.round(worker.x), y: Math.round(worker.y) },
+          { x: worker.target.x, y: worker.target.y }
+        );
+
+        if (route.length > 0) {
+          worker.path = route;
+          worker.lastReachedPos = { x: worker.x, y: worker.y };
+          worker.originalRouteLength = route.length;
+          worker.stuckTimer = 0;
+        } else {
+          // Truly dead-ended. Let the rescue logic handle it or let them be idle.
+          // For now, we'll just keep them as-is and they might be rescued if they stay stuck.
+        }
+      }
+    }
+
     if (worker.task === 'idle' || worker.task === 'atOffice') {
       worker.dx *= IDLE_DAMPING;
       worker.dy *= IDLE_DAMPING;
@@ -454,40 +497,46 @@ export function updateWorkers(game: Game, dt: number): void {
 
     if (
       (worker.task === 'toOffice' || worker.task === 'toHome') &&
-      !worker.path.length &&
+      worker.path.length === 0 &&
       worker.target
     ) {
-      if (worker.task === 'toOffice') {
-        const office = game.offices.find(
-          (f) => f.id === worker.assignedOfficeId
-        );
-        if (office) {
+      const dx = worker.target.x - worker.x;
+      const dy = worker.target.y - worker.y;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < CLOSE_ENOUGH_DEST * CLOSE_ENOUGH_DEST) {
+        if (worker.task === 'toOffice') {
+          const office = game.offices.find(
+            (f) => f.id === worker.assignedOfficeId
+          );
+          if (office) {
+            worker.x = worker.target.x;
+            worker.y = worker.target.y;
+            worker.dx = 0;
+            worker.dy = 0;
+            game.consumeOfficeIssue(office);
+            game.servedTrips += 1;
+            worker.task = 'atOffice';
+            worker.lastReachedPos = null;
+            worker.waitTimer = 1.2;
+          } else {
+            worker.task = 'idle';
+            worker.lastReachedPos = null;
+            unassignFromOffice(game, worker.id, worker.assignedOfficeId);
+            worker.assignedOfficeId = null;
+          }
+        } else {
           worker.x = worker.target.x;
           worker.y = worker.target.y;
           worker.dx = 0;
           worker.dy = 0;
-          game.consumeOfficeIssue(office);
-          game.servedTrips += 1;
-          worker.task = 'atOffice';
-          worker.lastReachedPos = null;
-          worker.waitTimer = 1.2;
-        } else {
           worker.task = 'idle';
           worker.lastReachedPos = null;
           unassignFromOffice(game, worker.id, worker.assignedOfficeId);
           worker.assignedOfficeId = null;
         }
-      } else {
-        worker.x = worker.target.x;
-        worker.y = worker.target.y;
-        worker.dx = 0;
-        worker.dy = 0;
-        worker.task = 'idle';
-        worker.lastReachedPos = null;
-        unassignFromOffice(game, worker.id, worker.assignedOfficeId);
-        worker.assignedOfficeId = null;
+        worker.target = null;
       }
-      worker.target = null;
     }
 
     if (worker.task === 'atOffice') {
