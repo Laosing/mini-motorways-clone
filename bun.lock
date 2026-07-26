@@ -5,7 +5,7 @@
     "": {
       "name": "kingdoms-castles",
       "dependencies": {
-        "littlejsengine": "^1.11.3",
+        "littlejsengine": "1.18.15",
       },
       "devDependencies": {
         "@eslint/js": "^9.22.0",
@@ -363,7 +363,7 @@
 
     "levn": ["levn@0.4.1", "", { "dependencies": { "prelude-ls": "^1.2.1", "type-check": "~0.4.0" } }, "sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ=="],
 
-    "littlejsengine": ["littlejsengine@1.18.0", "", {}, "sha512-4xF+JbxH9i5O7PR+Be7oK9ZlYMqED37Ao08tlXpFRc44iw+Xb9Ye6dkUlo8/39qjv5nQ7TYQSdXOV2iJfq1+dw=="],
+    "littlejsengine": ["littlejsengine@1.18.15", "", {}, "sha512-ym1noMK4kT8iwA8cWa84/IuieARCcufI30Q805qeKUC1v/VDpgYmU0AlqHIRJwychgk2H/ls781NxeXR2g1S3Q=="],
 
     "locate-path": ["locate-path@6.0.0", "", { "dependencies": { "p-locate": "^5.0.0" } }, "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw=="],
 
