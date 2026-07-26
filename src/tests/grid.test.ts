@@ -10,6 +10,25 @@ describe('GridMap', () => {
     expect(grid.height).toBe(15);
   });
 
+  it('expands while preserving existing tile data', () => {
+    const grid = new GridMap(3, 2);
+    const existingTile = grid.get(2, 1);
+    if (existingTile) {
+      existingTile.terrain = 'water';
+      existingTile.occupantId = 'building-1';
+    }
+
+    const expanded = grid.resized(6, 4);
+
+    expect(expanded.width).toBe(6);
+    expect(expanded.height).toBe(4);
+    expect(expanded.get(2, 1)?.terrain).toBe('water');
+    expect(expanded.get(2, 1)?.occupantId).toBe('building-1');
+    expect(expanded.get(5, 3)?.terrain).toBe('grass');
+    expect(grid.width).toBe(3);
+    expect(grid.height).toBe(2);
+  });
+
   it('checks if position is inside grid boundaries', () => {
     const grid = new GridMap(5, 5);
 

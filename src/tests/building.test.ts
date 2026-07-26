@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as LJS from 'littlejsengine';
+import { Game } from '@core/Game';
 import { Building } from '@entities/Building';
 
 describe('Building', () => {
@@ -45,6 +46,29 @@ describe('Building', () => {
     expect(office.needyness).toBe(240);
     expect(office.numDemand).toBe(3);
     expect(office.demandTimers.length).toBe(3);
+  });
+
+  it('supports two distinct office entrances', () => {
+    const game = new Game(1);
+    const office = game.addTestBuilding(10, 10, 'office', 'blue', 2, 3);
+
+    expect(office.entrances).toHaveLength(2);
+    expect(office.entrances[0].entryTile).not.toEqual(
+      office.entrances[1].entryTile
+    );
+
+    const [first, second] = office.entrances;
+    expect(
+      second.entrance.x -
+        second.entryTile.x +
+        (first.entrance.x - first.entryTile.x)
+    ).toBe(0);
+    expect(
+      second.entrance.y -
+        second.entryTile.y +
+        (first.entrance.y - first.entryTile.y)
+    ).toBe(0);
+    expect(second.entryTile.x).toBe(first.entryTile.x);
   });
 
   it('initializes demand timers with random values', () => {

@@ -17,6 +17,8 @@ export class Worker extends LJS.EngineObject implements Entity {
   path: Array<{ x: number; y: number }> = [];
   waitTimer: number = WORKER_CONFIG.waitTimer;
   assignedOfficeId: string | null = null;
+  parkingSpotIndex: number | null = null;
+  officeEntry: { x: number; y: number } | null = null;
   originalRouteLength: number = 0;
   lastReachedPos: { x: number; y: number } | null = null;
   stuckTimer: number = 0;
@@ -28,7 +30,7 @@ export class Worker extends LJS.EngineObject implements Entity {
     homeHouseId: string,
     destinationType: DestinationType
   ) {
-    // Roughly 0.35 cells diameter matches SVG r=1.35
+    // Engine footprint remains independent from the custom rendered body.
     super(pos, LJS.vec2(WORKER_CONFIG.size, WORKER_CONFIG.size));
     this.id = id;
     this.homeHouseId = homeHouseId;
@@ -92,26 +94,10 @@ export class Worker extends LJS.EngineObject implements Entity {
       this.pos.x + Worker._cachedOffset.x,
       this.pos.y + Worker._cachedOffset.y
     );
-    LJS.drawCircle(Worker._cachedPos, 0.17, COLOR_RESOURCES.shadow);
+    LJS.drawCircle(Worker._cachedPos, 0.15, COLOR_RESOURCES.shadow);
 
     // Render body
-    Worker._cachedBodySize.set(0.34, 0.34);
+    Worker._cachedBodySize.set(0.3, 0.3);
     LJS.drawEllipse(this.pos, Worker._cachedBodySize, color, this.angle);
-
-    // Render head (the little dot indicating direction)
-    const cosAngle = Math.cos(-this.angle);
-    const sinAngle = Math.sin(-this.angle);
-    const hx = 0.12;
-    const hy = 0;
-    Worker._cachedOffset.set(
-      hx * cosAngle - hy * sinAngle,
-      hx * sinAngle + hy * cosAngle
-    );
-
-    Worker._cachedPos.set(
-      this.pos.x + Worker._cachedOffset.x,
-      this.pos.y + Worker._cachedOffset.y
-    );
-    LJS.drawCircle(Worker._cachedPos, 0.08, COLOR_RESOURCES.ui, 0);
   }
 }

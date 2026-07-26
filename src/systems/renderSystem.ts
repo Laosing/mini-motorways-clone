@@ -3,10 +3,16 @@ import * as LJS from 'littlejsengine';
 import { COLOR_RESOURCES } from '@core/colors';
 import { createRoundaboutEdges } from './pathNetwork';
 import { isValidRoundaboutPlacement } from './placementSystem';
-import { COLOR_CONFIG } from '@core/config';
+import { COLOR_CONFIG, PATH_CONFIG } from '@core/config';
 
 let terrainLayer: LJS.TileLayer | undefined;
 let mainTileInfo: LJS.TileInfo | undefined;
+
+export function invalidateGridLayer(): void {
+  terrainLayer?.destroy();
+  terrainLayer = undefined;
+  mainTileInfo = undefined;
+}
 
 function ensureLayers(game: Game) {
   if (terrainLayer) return;
@@ -54,10 +60,7 @@ function ensureLayers(game: Game) {
   terrainLayer.redraw();
 }
 
-/**
- * Draws a pass of the road network (either the border pass or the fill pass)
- * drawing all elements of that color at once to ensure fusion.
- */
+/** Draws the road network together so connected segments fuse cleanly. */
 function drawPathPass(edges: any[], width: number, color: LJS.Color) {
   if (edges.length === 0) return;
   const r = width;
@@ -138,9 +141,8 @@ export function drawWorld(game: Game): void {
     LJS.drawLine(tempPosA, tempPosB, 0.02, gridColor);
   }
 
-  // --- PATH RENDERING (FUSED MULTI-PASS) ---
-  const pWidth = 0.52;
-  const border = COLOR_CONFIG.outlineWidth;
+  // --- PATH RENDERING ---
+  const pWidth = PATH_CONFIG.renderWidth;
   const pColor = COLOR_RESOURCES.path;
 
   // 1. MAIN NETWORK
@@ -148,23 +150,19 @@ export function drawWorld(game: Game): void {
   const normalPaths = game.paths.filter(
     (p) => p.roundaboutId === undefined || p.roundaboutId === null
   );
-  drawPathPass(normalPaths, pWidth + border * 2, COLOR_RESOURCES.white);
   drawPathPass(normalPaths, pWidth, pColor);
 
   // Draw roundabout edges with arrows
   const roundaboutEdges = game.paths.filter(
     (p) => p.roundaboutId !== undefined && p.roundaboutId !== null
   );
-  drawPathPass(roundaboutEdges, pWidth + border * 2, COLOR_RESOURCES.white);
   drawPathPass(roundaboutEdges, pWidth, new LJS.Color(0.3, 0.4, 0.2));
   for (const edge of roundaboutEdges) {
     drawRoundaboutArrow(edge.a, edge.b);
   }
 
   // 2. PREVIEW NETWORK (Ghost Paths)
-  const previewWhite = new LJS.Color(1, 1, 1, 0.3);
   const previewFill = new LJS.Color(pColor.r, pColor.g, pColor.b, 0.15);
-  drawPathPass(game.pathPreview, pWidth + border * 2, previewWhite);
   drawPathPass(game.pathPreview, pWidth, previewFill);
 
   // Draw roundabout preview when tool is active

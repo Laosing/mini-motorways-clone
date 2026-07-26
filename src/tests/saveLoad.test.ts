@@ -168,6 +168,24 @@ describe('Save/Load System', () => {
     expect(game2.grid.get(0, 0)?.terrain).toBe('grass');
   });
 
+  it('preserves an expanded grid and its existing world state', () => {
+    const game1 = new Game(1);
+    game1.init();
+    const house = game1.addTestBuilding(5, 5, 'house', 'blue');
+    game1.addTestPath(5, 5, 6, 5);
+
+    game1.doubleGridSize();
+    const snapshot = game1.toSnapshot();
+    const game2 = new Game(2);
+    game2.restore(snapshot);
+
+    expect(game2.grid.width).toBe(80);
+    expect(game2.grid.height).toBe(48);
+    expect(game2.grid.get(5, 5)?.occupantId).toBe(house.id);
+    expect(game2.grid.get(79, 47)?.terrain).toBe('grass');
+    expect(game2.paths).toEqual(game1.paths);
+  });
+
   it('restores office demand state', () => {
     const game1 = new Game(1);
     game1.init();

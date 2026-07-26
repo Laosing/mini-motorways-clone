@@ -42,7 +42,24 @@ export class GridMap {
     return this.tiles.map((tile) => ({ ...tile }));
   }
 
+  resized(width: number, height: number): GridMap {
+    if (width < this.width || height < this.height) {
+      throw new Error('GridMap.resized only supports expanding the grid');
+    }
+
+    const resized = new GridMap(width, height);
+    this.forEach((tile) => {
+      const target = resized.get(tile.x, tile.y);
+      if (target) Object.assign(target, tile);
+    });
+    return resized;
+  }
+
   static fromSnapshot(width: number, height: number, tiles: Tile[]): GridMap {
-    return new GridMap(width, height, tiles.map((tile) => ({ ...tile })));
+    return new GridMap(
+      width,
+      height,
+      tiles.map((tile) => ({ ...tile }))
+    );
   }
 }

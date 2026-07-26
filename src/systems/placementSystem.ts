@@ -67,6 +67,7 @@ export function placeRoundabout(game: Game, x: number, y: number): boolean {
   // Remove existing paths in the roundabout area
   const beforePathCount = game.paths.length;
   game.paths = game.paths.filter((p) => {
+    if (p.locked) return true;
     const aIn =
       p.a.x >= x - radius &&
       p.a.x <= x + radius &&

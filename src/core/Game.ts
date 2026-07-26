@@ -15,12 +15,13 @@ import { generateWorld } from '@world/generation';
 import { applyCamera, type Camera } from '@world/camera';
 import {
   Building,
+  type BuildingEntrance,
   type StructureRole,
   type DestinationType
 } from '@entities/Building';
 import { Worker } from '@entities/Worker';
 import { type Entity, makeId, primeIdCounterFromIds } from '@entities/Entity';
-import { drawWorld } from '@systems/renderSystem';
+import { drawWorld, invalidateGridLayer } from '@systems/renderSystem';
 import { handleInput } from '@systems/inputSystem';
 import { updateWorkers } from '@systems/taskSystem';
 import { loadSnapshot, saveNow } from '@systems/saveSystem';
@@ -38,6 +39,28 @@ interface SpawnPositionOptions {
   maxNumAttempts?: number;
 }
 
+export function hasOneTileBuildingClearance(
+  buildings: readonly Building[],
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): boolean {
+  const right = x + width - 1;
+  const bottom = y + height - 1;
+
+  return buildings.every((building) => {
+    const buildingRight = building.x + building.width - 1;
+    const buildingBottom = building.y + building.height - 1;
+    return (
+      right + 1 < building.x ||
+      x - 1 > buildingRight ||
+      bottom + 1 < building.y ||
+      y - 1 > buildingBottom
+    );
+  });
+}
+
 export interface BuildingSnapshot {
   id: string;
   role: StructureRole;
@@ -51,6 +74,7 @@ export interface BuildingSnapshot {
   assignedWorkerIds: string[];
   entrance: { x: number; y: number };
   entryTile: { x: number; y: number };
+  entrances: BuildingEntrance[];
   demandTimers: number[];
   active: boolean;
   demand: number;
@@ -69,6 +93,9 @@ export interface WorkerSnapshot {
   task: import('@entities/Worker').WorkerTask;
   path: { x: number; y: number }[];
   assignedOfficeId: string | null;
+  target: { x: number; y: number } | null;
+  parkingSpotIndex: number | null;
+  officeEntry: { x: number; y: number } | null;
   dx: number;
   dy: number;
   rotation: number;
@@ -80,6 +107,8 @@ export interface WorkerSnapshot {
 export interface Snapshot {
   day: number;
   timeInDay: number;
+  gridWidth?: number;
+  gridHeight?: number;
   gridTiles: ReturnType<GridMap['snapshot']>;
   buildings: BuildingSnapshot[];
   workers: WorkerSnapshot[];
@@ -172,6 +201,12 @@ export class Game {
     this.autoSpawningEnabled = !this.autoSpawningEnabled;
   }
 
+  doubleGridSize(): void {
+    this.grid = this.grid.resized(this.grid.width * 2, this.grid.height * 2);
+    invalidateGridLayer();
+    this.statusText = `Grid expanded to ${this.grid.width} × ${this.grid.height}`;
+  }
+
   update(dt: number): void {
     if (LJS.keyWasPressed('Space')) this.togglePause();
     if (LJS.keyWasPressed('KeyS')) this.save();
@@ -252,7 +287,20 @@ export class Game {
     width = 1,
     height = 1
   ): Building {
-    const entrance = { x, y: y + 1 }; // Default for test
+    const officeOptions =
+      role === 'office'
+        ? this.getOfficeEntranceOptions(x, y, width, height)
+        : [];
+    const firstOfficeEntrance = officeOptions[0];
+    const secondOfficeEntrance = firstOfficeEntrance
+      ? this.getOppositeOfficeEntrance(firstOfficeEntrance, officeOptions)
+      : undefined;
+    const officeEntrances =
+      firstOfficeEntrance && secondOfficeEntrance
+        ? [firstOfficeEntrance, secondOfficeEntrance]
+        : [];
+    const entrance = officeEntrances[0]?.entrance ?? { x, y: y + 1 };
+    const entryTile = officeEntrances[0]?.entryTile ?? { x, y };
     const building = new Building(
       LJS.vec2(x + (width - 1) / 2, y + (height - 1) / 2),
       LJS.vec2(width, height),
@@ -260,7 +308,10 @@ export class Game {
       role,
       type,
       entrance,
-      { x, y }
+      entryTile,
+      undefined,
+      undefined,
+      officeEntrances
     );
     this.buildings.push(building);
     this.setStructureOccupancy(building, building.id);
@@ -291,6 +342,8 @@ export class Game {
     return {
       day: this.day,
       timeInDay: this.timeInDay,
+      gridWidth: this.grid.width,
+      gridHeight: this.grid.height,
       gridTiles: this.grid.snapshot(),
       buildings: this.buildings.map((b) => ({
         id: b.id,
@@ -305,6 +358,10 @@ export class Game {
         assignedWorkerIds: [...b.assignedWorkerIds],
         entrance: { ...b.entrance },
         entryTile: { ...b.entryTile },
+        entrances: b.entrances.map((pair) => ({
+          entrance: { ...pair.entrance },
+          entryTile: { ...pair.entryTile }
+        })),
         demandTimers: [...(b.demandTimers ?? [])],
         active: b.active,
         demand: b.demand,
@@ -322,6 +379,9 @@ export class Game {
         task: v.task,
         path: [...v.path],
         assignedOfficeId: v.assignedOfficeId,
+        target: v.target ? { ...v.target } : null,
+        parkingSpotIndex: v.parkingSpotIndex,
+        officeEntry: v.officeEntry ? { ...v.officeEntry } : null,
         dx: v.dx,
         dy: v.dy,
         rotation: v.rotation,
@@ -333,7 +393,8 @@ export class Game {
         a: { ...p.a },
         b: { ...p.b },
         direction: p.direction,
-        roundaboutId: p.roundaboutId
+        roundaboutId: p.roundaboutId,
+        locked: p.locked
       })),
       roundabouts: this.roundabouts.map((rb) => ({
         ...rb,
@@ -350,11 +411,22 @@ export class Game {
   restore(snapshot: Snapshot): void {
     this.day = snapshot.day;
     this.timeInDay = snapshot.timeInDay;
+    const savedWidth =
+      Number.isInteger(snapshot.gridWidth) && snapshot.gridWidth! > 0
+        ? snapshot.gridWidth!
+        : MAP_CONFIG.width;
+    const savedHeight =
+      Number.isInteger(snapshot.gridHeight) && snapshot.gridHeight! > 0
+        ? snapshot.gridHeight!
+        : MAP_CONFIG.height;
+    const hasValidGridSize =
+      snapshot.gridTiles.length === savedWidth * savedHeight;
     this.grid = GridMap.fromSnapshot(
-      MAP_CONFIG.width,
-      MAP_CONFIG.height,
+      hasValidGridSize ? savedWidth : MAP_CONFIG.width,
+      hasValidGridSize ? savedHeight : MAP_CONFIG.height,
       snapshot.gridTiles
     );
+    invalidateGridLayer();
 
     const incomingIds = [
       ...snapshot.buildings.map((b) => b.id),
@@ -386,7 +458,8 @@ export class Game {
         b.entrance || { x: Math.round(pos.x), y: Math.round(pos.y) + 1 }, // Fallback
         b.entryTile || { x: Math.round(pos.x), y: Math.round(pos.y) }, // Fallback
         b.needyness,
-        b.numDemand
+        b.numDemand,
+        b.entrances
       );
       building.assignedWorkerIds = [...(b.assignedWorkerIds ?? [])];
       building.demandTimers = b.demandTimers;
@@ -423,6 +496,9 @@ export class Game {
       worker.task = v.task;
       worker.path = [...(v.path ?? [])];
       worker.assignedOfficeId = v.assignedOfficeId ?? null;
+      worker.target = v.target ? { ...v.target } : null;
+      worker.parkingSpotIndex = v.parkingSpotIndex ?? null;
+      worker.officeEntry = v.officeEntry ? { ...v.officeEntry } : null;
       worker.dx = v.dx ?? 0;
       worker.dy = v.dy ?? 0;
       worker.rotation = v.rotation ?? 0;
@@ -435,7 +511,8 @@ export class Game {
       a: { ...p.a },
       b: { ...p.b },
       direction: p.direction,
-      roundaboutId: p.roundaboutId
+      roundaboutId: p.roundaboutId,
+      locked: p.locked
     }));
     this.roundabouts = (snapshot.roundabouts ?? []).map((rb) => ({
       ...rb,
@@ -633,33 +710,30 @@ export class Game {
     const cfg = this.officeConfig(destination);
 
     // Pick a random valid entrance neighbor
-    const allNeighbors: Array<{ x: number; y: number }> = [];
-    // Orthogonal neighbors for a multi-tile office:
-    // Top and Bottom edges
-    for (let ox = 0; ox < officeProps.width; ox++) {
-      allNeighbors.push({ x: pos.x + ox, y: pos.y - 1 }); // Top
-      allNeighbors.push({ x: pos.x + ox, y: pos.y + officeProps.height }); // Bottom
-    }
-    // Left and Right edges
-    for (let oy = 0; oy < officeProps.height; oy++) {
-      allNeighbors.push({ x: pos.x - 1, y: pos.y + oy }); // Left
-      allNeighbors.push({ x: pos.x + officeProps.width, y: pos.y + oy }); // Right
-    }
-
-    const validEntrances = allNeighbors.filter(
-      (n) =>
-        this.grid.isInside(n.x, n.y) && !this.grid.get(n.x, n.y)?.occupantId
+    const validEntrances = this.getOfficeEntranceOptions(
+      pos.x,
+      pos.y,
+      officeProps.width,
+      officeProps.height
+    ).filter(
+      (pair) =>
+        this.grid.isInside(pair.entrance.x, pair.entrance.y) &&
+        !this.grid.get(pair.entrance.x, pair.entrance.y)?.occupantId
     );
-    const entrance =
-      validEntrances.length > 0
-        ? validEntrances[this.rng.int(0, validEntrances.length)]
-        : { x: pos.x, y: pos.y - 1 };
+    if (validEntrances.length < 1) return false;
 
-    // Find the tile inside the office that is closest to the entrance tile
-    const entryTile = {
-      x: Math.max(pos.x, Math.min(pos.x + officeProps.width - 1, entrance.x)),
-      y: Math.max(pos.y, Math.min(pos.y + officeProps.height - 1, entrance.y))
-    };
+    const firstIndex = this.rng.int(0, validEntrances.length);
+    const firstEntrance = validEntrances[firstIndex];
+    const shouldHaveTwoEntrances = this.rng.next() < 0.5;
+    const secondEntrance = shouldHaveTwoEntrances
+      ? this.getOppositeOfficeEntrance(firstEntrance, validEntrances)
+      : undefined;
+    if (!firstEntrance || (shouldHaveTwoEntrances && !secondEntrance)) {
+      return false;
+    }
+    const officeEntrances = secondEntrance
+      ? [firstEntrance, secondEntrance]
+      : [firstEntrance];
 
     const office = new Building(
       LJS.vec2(
@@ -670,19 +744,102 @@ export class Game {
       makeId('office'),
       'office',
       destination,
-      entrance,
-      entryTile,
+      firstEntrance.entrance,
+      firstEntrance.entryTile,
       cfg.needyness,
-      cfg.numDemand
+      cfg.numDemand,
+      officeEntrances
     );
     this.ensureOfficeDemand(office);
     this.buildings.push(office);
     this.setStructureOccupancy(office, office.id);
 
-    // Add exactly one starter path segment from the office to its entrance
-    this.paths.push({ a: entryTile, b: entrance });
+    this.addOfficeEntrancePaths(officeEntrances);
     this.pathsChanged = true;
     return true;
+  }
+
+  private addOfficeEntrancePaths(entrances: BuildingEntrance[]): void {
+    for (const pair of entrances) {
+      this.paths.push({
+        a: { ...pair.entryTile },
+        b: { ...pair.entrance },
+        locked: true
+      });
+    }
+
+    const start = entrances[0]?.entryTile;
+    const end = entrances[1]?.entryTile;
+    if (!start || !end) return;
+
+    let current = { ...start };
+    while (current.x !== end.x) {
+      const next = {
+        x: current.x + Math.sign(end.x - current.x),
+        y: current.y
+      };
+      this.paths.push({ a: current, b: next, locked: true });
+      current = next;
+    }
+    while (current.y !== end.y) {
+      const next = {
+        x: current.x,
+        y: current.y + Math.sign(end.y - current.y)
+      };
+      this.paths.push({ a: current, b: next, locked: true });
+      current = next;
+    }
+  }
+
+  private getOfficeEntranceOptions(
+    x: number,
+    y: number,
+    width: number,
+    height: number
+  ): BuildingEntrance[] {
+    const options: BuildingEntrance[] = [];
+
+    for (let ox = 0; ox < width; ox++) {
+      options.push({
+        entrance: { x: x + ox, y: y - 1 },
+        entryTile: { x: x + ox, y }
+      });
+      options.push({
+        entrance: { x: x + ox, y: y + height },
+        entryTile: { x: x + ox, y: y + height - 1 }
+      });
+    }
+    for (let oy = 0; oy < height; oy++) {
+      options.push({
+        entrance: { x: x - 1, y: y + oy },
+        entryTile: { x, y: y + oy }
+      });
+      options.push({
+        entrance: { x: x + width, y: y + oy },
+        entryTile: { x: x + width - 1, y: y + oy }
+      });
+    }
+
+    return options;
+  }
+
+  private getOppositeOfficeEntrance(
+    first: BuildingEntrance,
+    options: BuildingEntrance[]
+  ): BuildingEntrance | undefined {
+    const firstDx = first.entrance.x - first.entryTile.x;
+    const firstDy = first.entrance.y - first.entryTile.y;
+
+    return options.find((pair) => {
+      const dx = pair.entrance.x - pair.entryTile.x;
+      const dy = pair.entrance.y - pair.entryTile.y;
+      const isOppositeDirection = dx === -firstDx && dy === -firstDy;
+      const isDirectlyAcross =
+        firstDx === 0
+          ? pair.entryTile.x === first.entryTile.x
+          : pair.entryTile.y === first.entryTile.y;
+      return isOppositeDirection && isDirectlyAcross;
+    });
   }
 
   private officeConfig(destination: DestinationType): {
@@ -745,6 +902,8 @@ export class Game {
     y: number,
     destination: DestinationType
   ): void {
+    if (!hasOneTileBuildingClearance(this.buildings, x, y, 1, 1)) return;
+
     // Pick random orthogonal entrance for 1x1 house
     const neighbors = [
       { x: x + 1, y: y },
@@ -778,17 +937,35 @@ export class Game {
     this.pathsChanged = true;
 
     for (let p = 0; p < BUILDING_CONFIG.house.residents; p += 1) {
-      const varianceX = this.rng.next() * 0.5 - 0.25;
-      const varianceY = this.rng.next() * 0.5 - 0.25;
-      this.workers.push(
-        new Worker(
-          LJS.vec2(x + varianceX, y + varianceY),
-          makeId('person'),
-          house.id,
-          destination
-        )
+      this.spawnResident(house);
+    }
+  }
+
+  public replaceStuckWorker(worker: Worker): Worker | null {
+    const home = this.houses.find((house) => house.id === worker.homeHouseId);
+
+    for (const office of this.offices) {
+      office.assignedWorkerIds = office.assignedWorkerIds.filter(
+        (id) => id !== worker.id
       );
     }
+    this.workers = this.workers.filter((resident) => resident.id !== worker.id);
+    worker.destroy();
+
+    return home ? this.spawnResident(home) : null;
+  }
+
+  private spawnResident(house: Building): Worker {
+    const varianceX = this.rng.next() * 0.5 - 0.25;
+    const varianceY = this.rng.next() * 0.5 - 0.25;
+    const worker = new Worker(
+      LJS.vec2(house.x + varianceX, house.y + varianceY),
+      makeId('person'),
+      house.id,
+      house.destination
+    );
+    this.workers.push(worker);
+    return worker;
   }
 
   private ensureTwoWorkersPerHouse(): void {
@@ -799,16 +976,7 @@ export class Game {
         BUILDING_CONFIG.house.residents - residents.length
       );
       for (let i = 0; i < missing; i += 1) {
-        const varianceX = this.rng.next() * 0.5 - 0.25;
-        const varianceY = this.rng.next() * 0.5 - 0.25;
-        this.workers.push(
-          new Worker(
-            LJS.vec2(house.x + varianceX, house.y + varianceY),
-            makeId('person'),
-            house.id,
-            house.destination
-          )
-        );
+        this.spawnResident(house);
       }
     }
   }
@@ -916,6 +1084,9 @@ export class Game {
         if (blocked) break;
       }
       if (blocked) continue;
+      if (!hasOneTileBuildingClearance(this.buildings, x, y, width, height)) {
+        continue;
+      }
 
       const pathCollision = this.paths.some((p) => {
         for (let ox = 0; ox < width; ox += 1) {

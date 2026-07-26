@@ -5,6 +5,7 @@ export interface PathEdge {
   b: { x: number; y: number };
   direction?: 'clockwise';
   roundaboutId?: string;
+  locked?: boolean;
 }
 
 export interface Roundabout {

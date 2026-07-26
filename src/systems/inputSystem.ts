@@ -14,7 +14,7 @@ function mouseToTile(game: Game): { x: number; y: number } | null {
   return { x: wx, y: wy };
 }
 
-function tryAddEdge(
+export function tryAddEdge(
   game: Game,
   from: { x: number; y: number },
   to: { x: number; y: number }
@@ -36,9 +36,9 @@ function tryAddEdge(
     if (!occupantId) return true;
     const building = game.buildings.find((b) => b.id === occupantId);
     if (!building || building.role !== 'office') return true;
-    return (
-      building.entrance.x === otherPoint.x &&
-      building.entrance.y === otherPoint.y
+    return building.entrances.some(
+      (pair) =>
+        pair.entrance.x === otherPoint.x && pair.entrance.y === otherPoint.y
     );
   };
 
@@ -49,7 +49,7 @@ function tryAddEdge(
     return false;
   }
 
-  // Preserve the rule: Buildings can only have ONE road connection (terminal node)
+  // Preserve the rule: each occupied entrance tile is a terminal road node.
   const isInternalOccupiedNode = (pos: { x: number; y: number }): boolean => {
     if (!game.grid.get(pos.x, pos.y)?.occupantId) return false;
     return game.paths.some(
@@ -125,12 +125,40 @@ function getPotentialNeighbor(
 
   return { x: targetX, y: targetY };
 }
+
+export function panCameraByMouseDrag(
+  game: Game,
+  mouseDelta: Pick<LJS.Vector2, 'x' | 'y'>
+): void {
+  game.camera.x -= mouseDelta.x;
+  game.camera.y -= mouseDelta.y;
+}
+
+export function removePathsAtTile(
+  game: Game,
+  tile: { x: number; y: number }
+): void {
+  const previousLength = game.paths.length;
+  game.paths = game.paths.filter((path) => {
+    if (path.locked) return true;
+    const touchesTile =
+      (path.a.x === tile.x && path.a.y === tile.y) ||
+      (path.b.x === tile.x && path.b.y === tile.y);
+    return !touchesTile;
+  });
+  if (game.paths.length !== previousLength) game.pathsChanged = true;
+}
+
 export function handleInput(game: Game): void {
   const panSpeed = 0.5;
   if (LJS.keyIsDown('ArrowLeft')) game.camera.x -= panSpeed;
   if (LJS.keyIsDown('ArrowRight')) game.camera.x += panSpeed;
   if (LJS.keyIsDown('ArrowUp')) game.camera.y += panSpeed;
   if (LJS.keyIsDown('ArrowDown')) game.camera.y -= panSpeed;
+
+  if (LJS.mouseIsDown(1)) {
+    panCameraByMouseDrag(game, LJS.mouseDelta);
+  }
 
   if (LJS.mouseWheel) {
     game.camera.scale = Math.max(
@@ -255,10 +283,6 @@ export function handleInput(game: Game): void {
     }
 
     // Fall back to normal path deletion
-    game.paths = game.paths.filter((p) => {
-      const matches =
-        (p.a.x === t.x && p.a.y === t.y) || (p.b.x === t.x && p.b.y === t.y);
-      return !matches;
-    });
+    removePathsAtTile(game, t);
   }
 }

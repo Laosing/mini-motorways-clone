@@ -41,6 +41,12 @@ export function setupHUD(game: Game): void {
     updateHUD(game);
   });
 
+  const expandGridBtn = createBtn('btn-expand-grid', '2× Grid', '', () => {
+    game.doubleGridSize();
+    updateHUD(game);
+  });
+  expandGridBtn.title = 'Double the grid width and height';
+
   const roundaboutBtn = document.createElement('button');
   roundaboutBtn.id = 'btn-roundabout';
   roundaboutBtn.className = 'game-btn';
@@ -93,6 +99,7 @@ export function updateHUD(game: Game): void {
       <span>Trips: <strong>${game.servedTrips}</strong></span>
       <span>Houses: <strong>${game.houses.length}</strong></span>
       <span>People: <strong>${game.workers.length}</strong></span>
+      <span style="grid-column: 1 / -1;">Grid: <strong>${game.grid.width} × ${game.grid.height}</strong></span>
     </div>
     <div style="margin-top: 10px; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.05);">
       <span style="color: #F15B5B;">Red: ${game.redCount}</span> |

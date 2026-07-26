@@ -11,10 +11,11 @@ import {
 } from './motion';
 import { findPathOnNetwork } from './pathNetwork';
 import { toKey } from '@utils/grid';
+import { WORKER_CONFIG } from '@core/config';
 
 const PX_TO_CELL = 1 / 8;
 const CLOSE_ENOUGH = 2 * PX_TO_CELL;
-const CLOSE_ENOUGH_DEST = 0.45;
+const CLOSE_ENOUGH_DEST = 0.05;
 const MAX_SPEED = 0.35 * PX_TO_CELL;
 const MIN_CRUISE_SPEED = 0.04 * PX_TO_CELL;
 const ARRIVAL_RADIUS = 2.5 * PX_TO_CELL;
@@ -67,7 +68,6 @@ function getLookaheadTarget(
 
     if (len > 0.0001) {
       if (len >= remaining) {
-        // Return a new vector here as it's used as a target
         return LJS.vec2(
           _v1.x + (dx / len) * remaining,
           _v1.y + (dy / len) * remaining
@@ -91,7 +91,6 @@ function getLaneOffsetVector(
   const dy = to.y - from.y;
   const len = Math.sqrt(dx * dx + dy * dy);
   if (len < 0.001) return LJS.vec2(0, 0);
-  // Perpendicular vector for Right Hand Traffic (RHT)
   return LJS.vec2((dy / len) * offset, (-dx / len) * offset);
 }
 
@@ -115,7 +114,7 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
   }
 
   const targetNode = worker.path[0];
-  _v3.set(targetNode.x, targetNode.y); // target
+  _v3.set(targetNode.x, targetNode.y);
 
   const closeEnough =
     worker.path.length === 1 ? CLOSE_ENOUGH_DEST : CLOSE_ENOUGH;
@@ -129,8 +128,6 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
       worker.lastReachedPos = { x: reached.x, y: reached.y };
     }
     if (!worker.path.length) {
-      worker.x = _v3.x;
-      worker.y = _v3.y;
       worker.dx = 0;
       worker.dy = 0;
       worker.lastReachedPos = null;
@@ -142,18 +139,23 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
     worker.lastReachedPos = { x: worker.x, y: worker.y };
   }
 
-  _v4.set(worker.lastReachedPos.x, worker.lastReachedPos.y); // prev
-  const laneOffset = getLaneOffsetVector(_v4, _v3, LANE_OFFSET);
+  const isFinalNode = worker.path.length === 1;
+  let laneOffsetX = 0;
+  let laneOffsetY = 0;
+  if (!isFinalNode) {
+    _v4.set(worker.lastReachedPos.x, worker.lastReachedPos.y);
+    const laneOffset = getLaneOffsetVector(_v4, _v3, LANE_OFFSET);
+    laneOffsetX = laneOffset.x;
+    laneOffsetY = laneOffset.y;
+  }
 
   const lookaheadTarget = getLookaheadTarget(_v2, worker.path);
-
-  // Reuse _v4 for steerTarget
-  const baseTarget = worker.path.length === 1 ? _v3 : lookaheadTarget;
-  _v4.set(baseTarget.x + laneOffset.x, baseTarget.y + laneOffset.y);
+  const baseTarget = isFinalNode ? _v3 : lookaheadTarget;
+  _v4.set(baseTarget.x + laneOffsetX, baseTarget.y + laneOffsetY);
 
   const rampCfg: SteeringConfig = {
     ...STEER_CFG,
-    minCruiseSpeed: worker.path.length === 1 ? 0 : MIN_CRUISE_SPEED,
+    minCruiseSpeed: isFinalNode ? 0 : MIN_CRUISE_SPEED,
     maxSpeed: MAX_SPEED * Math.min(1, dist / ARRIVAL_RADIUS)
   };
   steerToward(worker, _v4, rampCfg);
@@ -226,7 +228,11 @@ function applyWorkerCrowdAvoidance(game: Game, worker: Worker): void {
   const targetNode = worker.path[0];
   if (!targetNode) {
     getNearbyWorkers(game, worker.x, worker.y, AVOID_DISTANCE, _nearbyBuffer);
-    applyCrowdAvoidance(worker, _nearbyBuffer, CROWD_CFG);
+    _activeOthersBuffer.length = 0;
+    for (const nearby of _nearbyBuffer) {
+      if (nearby.task !== 'atOffice') _activeOthersBuffer.push(nearby);
+    }
+    applyCrowdAvoidance(worker, _activeOthersBuffer, CROWD_CFG);
     return;
   }
 
@@ -251,7 +257,11 @@ function applyWorkerCrowdAvoidance(game: Game, worker: Worker): void {
   };
 
   getNearbyWorkers(game, worker.x, worker.y, AVOID_DISTANCE, _nearbyBuffer);
-  applyCrowdAvoidance(worker, _nearbyBuffer, adaptiveCfg);
+  _activeOthersBuffer.length = 0;
+  for (const nearby of _nearbyBuffer) {
+    if (nearby.task !== 'atOffice') _activeOthersBuffer.push(nearby);
+  }
+  applyCrowdAvoidance(worker, _activeOthersBuffer, adaptiveCfg);
 }
 
 function assignPeopleToOfficeIssues(game: Game): void {
@@ -303,15 +313,25 @@ function assignPeopleToOfficeIssues(game: Game): void {
     if (currentAssigned >= requiredWorkers) continue;
 
     let needed = requiredWorkers - currentAssigned;
-    const officeEntry = office.entryTile;
-    const officeEntryKey = toKey(officeEntry.x, officeEntry.y);
+    const officeEntries = office.entrances.map((pair) => pair.entryTile);
+    const reservedParkingSpots = new Set(
+      game.workers
+        .filter(
+          (worker) =>
+            worker.assignedOfficeId === office.id &&
+            worker.parkingSpotIndex !== null
+        )
+        .map((worker) => worker.parkingSpotIndex!)
+    );
 
-    // 2. BFS from office entry to find nearest idle workers
+    // 2. Multi-source BFS from all office entries to find nearest idle workers
     const queue: Array<{
       pos: { x: number; y: number };
       path: Array<{ x: number; y: number }>;
-    }> = [{ pos: officeEntry, path: [officeEntry] }];
-    const visited = new Set<string>([officeEntryKey]);
+    }> = officeEntries.map((entry) => ({ pos: entry, path: [entry] }));
+    const visited = new Set<string>(
+      officeEntries.map((entry) => toKey(entry.x, entry.y))
+    );
 
     while (queue.length > 0 && needed > 0) {
       const current = queue.shift()!;
@@ -326,6 +346,11 @@ function assignPeopleToOfficeIssues(game: Game): void {
         );
 
         while (matched.length > 0 && needed > 0) {
+          const parkingSpotIndex = office.parkingSpots.findIndex(
+            (_spot, index) => !reservedParkingSpots.has(index)
+          );
+          if (parkingSpotIndex < 0) break;
+
           const v = matched.shift()!;
           // Remove from index so they aren't assigned twice in this frame
           const list = idleMap.get(currentKey)!;
@@ -334,13 +359,19 @@ function assignPeopleToOfficeIssues(game: Game): void {
 
           // Assign task
           v.task = 'toOffice';
-          v.target = { x: officeEntry.x, y: officeEntry.y };
+          const officeEntry = current.path[0];
+          const parkingSpot = office.parkingSpots[parkingSpotIndex];
+          v.target = { ...parkingSpot };
+          v.officeEntry = { ...officeEntry };
+          v.parkingSpotIndex = parkingSpotIndex;
           // The BFS path is from office -> home, we need home -> office
           v.path = [...current.path].reverse();
+          v.path.push({ ...parkingSpot });
           v.lastReachedPos = { x: v.x, y: v.y };
           v.originalRouteLength = v.path.length;
           v.assignedOfficeId = office.id;
           office.assignedWorkerIds.push(v.id);
+          reservedParkingSpots.add(parkingSpotIndex);
           needed--;
         }
       }
@@ -374,6 +405,11 @@ function unassignFromOffice(
   );
 }
 
+function releaseParkingSpot(worker: Worker): void {
+  worker.parkingSpotIndex = null;
+  worker.officeEntry = null;
+}
+
 function sanitizeWorkerPosition(game: Game, worker: Worker): void {
   const maxX = game.grid.width - 1;
   const maxY = game.grid.height - 1;
@@ -389,6 +425,7 @@ function sanitizeWorkerPosition(game: Game, worker: Worker): void {
     worker.task = 'idle';
     unassignFromOffice(game, worker.id, worker.assignedOfficeId);
     worker.assignedOfficeId = null;
+    releaseParkingSpot(worker);
     return;
   }
 
@@ -399,6 +436,7 @@ function sanitizeWorkerPosition(game: Game, worker: Worker): void {
 function resolveWorkerOverlaps(game: Game): void {
   for (let i = 0; i < game.workers.length; i++) {
     const a = game.workers[i];
+    if (a.task === 'atOffice') continue;
     // Don't apply hard collisions to ghosting workers
     if (a.stuckTimer > 4.0) continue;
 
@@ -407,7 +445,10 @@ function resolveWorkerOverlaps(game: Game): void {
     // Also filter others in the buffer that are ghosting to avoid pushing them
     _activeOthersBuffer.length = 0;
     for (let j = 0; j < _nearbyBuffer.length; j++) {
-      if (_nearbyBuffer[j].stuckTimer <= 4.0) {
+      if (
+        _nearbyBuffer[j].task !== 'atOffice' &&
+        _nearbyBuffer[j].stuckTimer <= 4.0
+      ) {
         _activeOthersBuffer.push(_nearbyBuffer[j]);
       }
     }
@@ -417,6 +458,7 @@ function resolveWorkerOverlaps(game: Game): void {
 
 export function updateWorkers(game: Game, dt: number): void {
   updateSpatialGrid(game);
+  const stuckWorkers: Worker[] = [];
 
   // Only check for new assignments every 10 frames to save CPU
   if (game.updateCount % 10 === 0) {
@@ -437,16 +479,33 @@ export function updateWorkers(game: Game, dt: number): void {
 
       if (distSq > CLOSE_ENOUGH_DEST * CLOSE_ENOUGH_DEST) {
         // Stranded in the middle! Try to find a new route.
+        const networkTarget =
+          worker.task === 'toOffice' && worker.officeEntry
+            ? worker.officeEntry
+            : worker.target;
         const route = findPathOnNetwork(
           game.paths,
           { x: Math.round(worker.x), y: Math.round(worker.y) },
-          { x: worker.target.x, y: worker.target.y }
+          networkTarget
         );
 
         if (route.length > 0) {
           worker.path = route;
+          if (worker.task === 'toOffice') {
+            worker.path.push({ ...worker.target });
+          }
           worker.lastReachedPos = { x: worker.x, y: worker.y };
-          worker.originalRouteLength = route.length;
+          worker.originalRouteLength = worker.path.length;
+          worker.stuckTimer = 0;
+        } else if (
+          worker.task === 'toOffice' &&
+          worker.officeEntry &&
+          Math.round(worker.x) === worker.officeEntry.x &&
+          Math.round(worker.y) === worker.officeEntry.y
+        ) {
+          worker.path = [{ ...worker.target }];
+          worker.lastReachedPos = { x: worker.x, y: worker.y };
+          worker.originalRouteLength = 1;
           worker.stuckTimer = 0;
         } else {
           // Truly dead-ended. Let the rescue logic handle it or let them be idle.
@@ -481,35 +540,11 @@ export function updateWorkers(game: Game, dt: number): void {
         worker.lastPosForStuck = { x: worker.x, y: worker.y };
       }
 
-      if (worker.stuckTimer > 1.5) {
-        // STATIONARY for 1.5s (reduced from 2s)
-        if (worker.path.length > 0) {
-          const node = worker.path[0];
-          const nx = node.x - worker.x;
-          const ny = node.y - worker.y;
-          const mag = Math.sqrt(nx * nx + ny * ny);
-
-          if (mag > 0.001) {
-            // Strong nudge toward target node
-            worker.dx += (nx / mag) * 0.08 * dt;
-            worker.dy += (ny / mag) * 0.08 * dt;
-          }
-
-          // STATIONARY for 5s (reduced from 8s): Teleport to the current node
-          if (worker.stuckTimer > 5.0) {
-            worker.x = node.x;
-            worker.y = node.y;
-            worker.stuckTimer = 1.0;
-          }
-
-          // STATIONARY for 8s (reduced from 12s): Skip this node
-          if (worker.stuckTimer > 8.0) {
-            worker.path.shift();
-            worker.stuckTimer = 0;
-          }
-        }
+      if (worker.stuckTimer >= WORKER_CONFIG.stuckTimerMax) {
+        stuckWorkers.push(worker);
+        continue;
       }
-    } else {
+    } else if (worker.task !== 'idle') {
       worker.stuckTimer = 0;
       worker.lastPosForStuck = null;
     }
@@ -538,8 +573,6 @@ export function updateWorkers(game: Game, dt: number): void {
             (f) => f.id === worker.assignedOfficeId
           );
           if (office) {
-            worker.x = worker.target.x;
-            worker.y = worker.target.y;
             worker.dx = 0;
             worker.dy = 0;
             game.consumeOfficeIssue(office);
@@ -552,16 +585,16 @@ export function updateWorkers(game: Game, dt: number): void {
             worker.lastReachedPos = null;
             unassignFromOffice(game, worker.id, worker.assignedOfficeId);
             worker.assignedOfficeId = null;
+            releaseParkingSpot(worker);
           }
         } else {
-          worker.x = worker.target.x;
-          worker.y = worker.target.y;
           worker.dx = 0;
           worker.dy = 0;
           worker.task = 'idle';
           worker.lastReachedPos = null;
           unassignFromOffice(game, worker.id, worker.assignedOfficeId);
           worker.assignedOfficeId = null;
+          releaseParkingSpot(worker);
         }
         worker.target = null;
       }
@@ -575,23 +608,48 @@ export function updateWorkers(game: Game, dt: number): void {
           worker.task = 'idle';
           unassignFromOffice(game, worker.id, worker.assignedOfficeId);
           worker.assignedOfficeId = null;
+          releaseParkingSpot(worker);
           continue;
         }
 
-        const startX = Math.round(worker.x);
-        const startY = Math.round(worker.y);
-        const backRoute = findPathOnNetwork(
-          game.paths,
-          { x: startX, y: startY },
-          { x: home.x, y: home.y }
+        const office = game.offices.find(
+          (candidate) => candidate.id === worker.assignedOfficeId
         );
+        let officeEntry = worker.officeEntry;
+        if (!officeEntry && office?.entrances.length) {
+          officeEntry = office.entrances.reduce((closest, pair) => {
+            const closestDistance =
+              (closest.x - worker.x) ** 2 + (closest.y - worker.y) ** 2;
+            const candidateDistance =
+              (pair.entryTile.x - worker.x) ** 2 +
+              (pair.entryTile.y - worker.y) ** 2;
+            return candidateDistance < closestDistance
+              ? pair.entryTile
+              : closest;
+          }, office.entrances[0].entryTile);
+        }
+        if (!officeEntry) {
+          worker.task = 'idle';
+          worker.target = null;
+          worker.path = [];
+          unassignFromOffice(game, worker.id, worker.assignedOfficeId);
+          worker.assignedOfficeId = null;
+          releaseParkingSpot(worker);
+          continue;
+        }
+
+        const backRoute = findPathOnNetwork(game.paths, officeEntry, {
+          x: home.x,
+          y: home.y
+        });
 
         if (backRoute.length) {
           worker.task = 'toHome';
           worker.target = { x: home.x, y: home.y };
-          worker.path = backRoute;
+          worker.path = [{ ...officeEntry }, ...backRoute];
           worker.lastReachedPos = { x: worker.x, y: worker.y };
-          worker.originalRouteLength = backRoute.length;
+          worker.originalRouteLength = worker.path.length;
+          releaseParkingSpot(worker);
         } else {
           // If no path back home, they are stranded.
           // Instead of immediate idle, we'll let the Rescue logic below handle the teleport.
@@ -600,6 +658,7 @@ export function updateWorkers(game: Game, dt: number): void {
           worker.path = [];
           unassignFromOffice(game, worker.id, worker.assignedOfficeId);
           worker.assignedOfficeId = null;
+          releaseParkingSpot(worker);
         }
       }
     }
@@ -635,21 +694,20 @@ export function updateWorkers(game: Game, dt: number): void {
             }
           }
 
-          // If stranded for 5+ seconds without a path, just teleport home
-          if (worker.stuckTimer > 5.0) {
-            worker.x = home.x;
-            worker.y = home.y;
-            worker.dx = 0;
-            worker.dy = 0;
-            worker.stuckTimer = 0;
+          if (worker.stuckTimer >= WORKER_CONFIG.stuckTimerMax) {
+            stuckWorkers.push(worker);
+            continue;
           }
         } else {
           worker.stuckTimer = 0;
         }
+      } else {
+        worker.stuckTimer = 0;
       }
     }
   }
 
   resolveWorkerOverlaps(game);
   for (const worker of game.workers) sanitizeWorkerPosition(game, worker);
+  for (const worker of stuckWorkers) game.replaceStuckWorker(worker);
 }

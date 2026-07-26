@@ -77,6 +77,10 @@ export const DEMAND_CONFIG = {
   pinSpacing: 0.22
 } as const;
 
+export const PATH_CONFIG = {
+  renderWidth: 0.52
+} as const;
+
 export const SPAWNING_CONFIG = {
   loopLength: 600,
   officeMinDistance: 2,
