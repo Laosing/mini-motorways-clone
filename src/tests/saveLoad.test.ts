@@ -1,7 +1,13 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Game } from '@core/Game';
 import { BUILDING_CONFIG } from '@core/config';
 import { Worker } from '@entities/Worker';
+import {
+  exportSnapshotFile,
+  formatSnapshotFile,
+  parseSnapshotFile,
+  SAVE_FILENAME
+} from '@systems/saveSystem';
 import * as LJS from 'littlejsengine';
 
 // Mock localStorage
@@ -29,6 +35,10 @@ describe('Save/Load System', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     for (const key in mockLocalStorage) delete mockLocalStorage[key];
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('creates a valid snapshot', () => {
@@ -252,5 +262,73 @@ describe('Save/Load System', () => {
     game2.restore(snapshot);
 
     expect(game2.updateCount).toBe(100);
+  });
+
+  it('formats a deterministic, git-friendly snapshot file', () => {
+    const game = new Game(44);
+    game.addTestBuilding(2, 3, 'house', 'yellow');
+
+    const contents = formatSnapshotFile(game);
+    const snapshot = JSON.parse(contents);
+
+    expect(contents.endsWith('\n')).toBe(true);
+    expect(contents).toContain('\n  "');
+    expect(snapshot.seed).toBe(44);
+    expect(snapshot.buildings).toHaveLength(1);
+  });
+
+  it('sends the snapshot to the development save endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi
+        .fn()
+        .mockResolvedValue({ written: true, filename: SAVE_FILENAME })
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const game = new Game(45);
+    game.addTestPath(1, 1, 2, 1);
+
+    const destination = await exportSnapshotFile(game);
+
+    expect(destination).toBe('repository');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [endpoint, request] = fetchMock.mock.calls[0];
+    expect(endpoint).toBe('/__save-game');
+    expect(request.method).toBe('POST');
+    expect(JSON.parse(request.body).paths).toHaveLength(1);
+  });
+
+  it('parses an exported snapshot file and rejects unrelated JSON', () => {
+    const game = new Game(46);
+    game.addTestBuilding(4, 5, 'house', 'red');
+
+    const snapshot = parseSnapshotFile(formatSnapshotFile(game));
+
+    expect(snapshot.seed).toBe(46);
+    expect(snapshot.buildings).toHaveLength(1);
+    expect(() => parseSnapshotFile('{"hello":"world"}')).toThrow(
+      'not a valid game snapshot'
+    );
+    expect(() => parseSnapshotFile('{')).toThrow('not valid JSON');
+  });
+
+  it('destroys active entities before loading a snapshot into the live game', () => {
+    const game = new Game(47);
+    const oldBuilding = game.addTestBuilding(1, 1, 'house', 'blue');
+    const oldWorker = new Worker(
+      LJS.vec2(1, 1),
+      'old-worker',
+      oldBuilding.id,
+      'blue'
+    );
+    game.workers = [oldWorker];
+
+    const source = new Game(48);
+    source.addTestBuilding(8, 8, 'house', 'yellow');
+    game.restore(source.toSnapshot());
+
+    expect(oldBuilding.destroyed).toBe(true);
+    expect(oldWorker.destroyed).toBe(true);
+    expect(game.houses[0].x).toBe(8);
   });
 });

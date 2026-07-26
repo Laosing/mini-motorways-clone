@@ -436,6 +436,9 @@ export class Game {
   }
 
   restore(snapshot: Snapshot): void {
+    for (const building of this.buildings) building.destroy();
+    for (const worker of this.workers) worker.destroy();
+
     this.day = snapshot.day;
     this.timeInDay = snapshot.timeInDay;
     const savedWidth =

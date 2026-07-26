@@ -23,4 +23,20 @@ describe('HUD grid controls', () => {
       '80 × 48'
     );
   });
+
+  it('places a JSON load button beside the save button', () => {
+    document.body.innerHTML = '<div id="ui"></div>';
+    const game = new Game(2);
+    setupHUD(game);
+
+    const saveButton = document.getElementById('btn-save');
+    const loadButton = document.getElementById('btn-load');
+    const fileInput =
+      document.querySelector<HTMLInputElement>('input[type="file"]');
+
+    expect(saveButton?.nextElementSibling).toBe(loadButton);
+    expect(loadButton?.textContent).toBe('Load Game');
+    expect(fileInput?.accept).toContain('.json');
+    expect(fileInput?.hidden).toBe(true);
+  });
 });

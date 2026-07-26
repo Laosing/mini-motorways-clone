@@ -1,4 +1,9 @@
 import type { Game } from '@core/Game';
+import {
+  exportSnapshotFile,
+  readSnapshotFile,
+  SAVE_FILENAME
+} from '@systems/saveSystem';
 
 let hudEl: HTMLDivElement | null = null;
 
@@ -61,8 +66,49 @@ export function setupHUD(game: Game): void {
 
   createBtn('btn-save', 'Save Game', 'primary', () => {
     game.save();
+    void exportSnapshotFile(game).then((destination) => {
+      game.statusText =
+        destination === 'repository'
+          ? 'Saved to savegame.json'
+          : 'Downloaded savegame.json';
+      updateHUD(game);
+    });
     updateHUD(game);
   });
+
+  const loadInput = document.createElement('input');
+  loadInput.type = 'file';
+  loadInput.accept = '.json,application/json';
+  loadInput.hidden = true;
+  loadInput.onchange = () => {
+    const file = loadInput.files?.[0];
+    if (!file) return;
+
+    void readSnapshotFile(file)
+      .then((snapshot) => {
+        game.restore(snapshot);
+        game.save();
+        game.statusText = `Loaded ${file.name}`;
+        updateHUD(game);
+      })
+      .catch((error: unknown) => {
+        const message =
+          error instanceof Error ? error.message : 'Could not load save file.';
+        game.statusText = message;
+        window.alert(message);
+        updateHUD(game);
+      })
+      .finally(() => {
+        loadInput.value = '';
+      });
+  };
+
+  const loadBtn = createBtn('btn-load', 'Load Game', '', () => {
+    loadInput.value = '';
+    loadInput.click();
+  });
+  loadBtn.title = `Load a ${SAVE_FILENAME} file`;
+  buttonGroup.appendChild(loadInput);
 
   createBtn('btn-reset', 'Reset', 'danger', () => {
     if (confirm('Are you sure you want to reset the entire world?')) {
