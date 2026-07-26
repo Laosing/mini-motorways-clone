@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { Game, hasOneTileBuildingClearance } from '@core/Game';
+import {
+  Game,
+  hasHouseSpawnClearance,
+  hasOneTileBuildingClearance
+} from '@core/Game';
 
 describe('building spawn spacing', () => {
   it('rejects adjacent and diagonal placements', () => {
@@ -25,5 +29,37 @@ describe('building spawn spacing', () => {
     game.spawnHouseAt(7, 5, 'yellow');
 
     expect(game.houses).toHaveLength(0);
+  });
+
+  it('allows houses to spawn directly beside other houses', () => {
+    const game = new Game(4);
+    game.addTestBuilding(5, 5, 'house', 'red');
+
+    game.spawnHouseAt(6, 5, 'blue');
+
+    expect(game.houses).toHaveLength(2);
+    expect(game.houses[1]).toMatchObject({
+      x: 6,
+      y: 5,
+      destination: 'blue'
+    });
+  });
+
+  it('still prevents houses from overlapping other houses', () => {
+    const game = new Game(5);
+    game.addTestBuilding(5, 5, 'house', 'red');
+
+    expect(hasHouseSpawnClearance(game.buildings, 5, 5, 1, 1)).toBe(false);
+    game.spawnHouseAt(5, 5, 'yellow');
+
+    expect(game.houses).toHaveLength(1);
+  });
+
+  it('keeps one empty tile around factories even when near a house', () => {
+    const game = new Game(6);
+    game.addTestBuilding(5, 5, 'house', 'red');
+
+    expect(hasOneTileBuildingClearance(game.buildings, 6, 5, 2, 3)).toBe(false);
+    expect(hasOneTileBuildingClearance(game.buildings, 7, 5, 2, 3)).toBe(true);
   });
 });

@@ -143,4 +143,15 @@ describe('Worker', () => {
     expect(v.x).toBe(10);
     expect(v.y).toBe(10);
   });
+
+  it('does not apply LittleJS physics after fixed-step worker movement', () => {
+    const v = new Worker(LJS.vec2(5, 5), 'v-fixed', 'h-1', 'blue');
+    v.dx = 0.5;
+    v.dy = -0.25;
+
+    v.updatePhysics();
+
+    expect(v.x).toBe(5);
+    expect(v.y).toBe(5);
+  });
 });

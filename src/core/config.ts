@@ -69,6 +69,13 @@ export const BUILDING_CONFIG = {
         height: 3
       }
     }
+  },
+  megaOffice: {
+    spawnChance: 0.2,
+    size: {
+      width: 4,
+      height: 3
+    }
   }
 } as const;
 
@@ -85,7 +92,8 @@ export const SPAWNING_CONFIG = {
   loopLength: 600,
   officeMinDistance: 2,
   officeMaxDistanceOffset: 3,
-  houseMinDistance: 1,
+  houseMinDistance: 0,
+  houseNeighborhoodRadius: 4,
   houseMaxDistanceFactor: 1 // multiplied by office count
 } as const;
 

@@ -62,6 +62,58 @@ describe('factory entrances', () => {
     }
   });
 
+  it('uses every interior tile without a path as a parking spot', () => {
+    for (const entranceCount of [1, 2] as const) {
+      const game = spawnFactoryWithEntranceCount(entranceCount);
+      const office = game.offices[0];
+      const isInsideOffice = (tile: { x: number; y: number }) =>
+        tile.x >= office.x &&
+        tile.x < office.x + office.width &&
+        tile.y >= office.y &&
+        tile.y < office.y + office.height;
+      const pathTiles = new Set<string>();
+
+      for (const path of game.paths) {
+        if (isInsideOffice(path.a)) pathTiles.add(`${path.a.x},${path.a.y}`);
+        if (isInsideOffice(path.b)) pathTiles.add(`${path.b.x},${path.b.y}`);
+      }
+
+      const expectedParkingTiles: Array<{ x: number; y: number }> = [];
+      for (let y = office.y; y < office.y + office.height; y++) {
+        for (let x = office.x; x < office.x + office.width; x++) {
+          if (!pathTiles.has(`${x},${y}`)) {
+            expectedParkingTiles.push({ x, y });
+          }
+        }
+      }
+
+      expect(office.parkingSpots).toEqual(expectedParkingTiles);
+    }
+  });
+
+  it('uses parking spots as inactive and active demand dots', () => {
+    const game = spawnFactoryWithEntranceCount(1);
+    const office = game.offices[0];
+
+    office.demandTimers = office.parkingSpots.map((_spot, index) =>
+      index < 2 ? 0 : 5
+    );
+    office.numDemand = office.demandTimers.length;
+    office.numIssues = 2;
+
+    expect(office.isParkingSpotActive(0)).toBe(true);
+    expect(office.isParkingSpotActive(1)).toBe(true);
+    expect(office.isParkingSpotActive(2)).toBe(false);
+
+    office.demandTimers = office.demandTimers.map(() => 5);
+    office.numIssues = 0;
+    expect(
+      office.parkingSpots.every(
+        (_spot, index) => !office.isParkingSpotActive(index)
+      )
+    ).toBe(true);
+  });
+
   it('routes a worker through the reachable second entrance', () => {
     const game = new Game(3);
     const house = game.addTestBuilding(1, 1, 'house', 'yellow');
@@ -88,17 +140,18 @@ describe('factory entrances', () => {
       x = nextX;
     }
 
-    office.demandTimers = [0];
-    office.numDemand = 1;
+    office.demandTimers = [5, 0, 5];
+    office.numDemand = 3;
     office.numIssues = 1;
     office.demand = office.needyness;
     updateWorkers(game, 0);
 
     expect(worker.task).toBe('toOffice');
     expect(worker.officeEntry).toEqual(secondEntry);
-    expect(worker.target).toEqual(office.parkingSpots[0]);
+    expect(worker.parkingSpotIndex).toBe(1);
+    expect(worker.target).toEqual(office.parkingSpots[1]);
     expect(worker.path.at(-2)).toEqual(secondEntry);
-    expect(worker.path.at(-1)).toEqual(office.parkingSpots[0]);
+    expect(worker.path.at(-1)).toEqual(office.parkingSpots[1]);
   });
 
   it('completes factory arrival without snapping to the tile center', () => {

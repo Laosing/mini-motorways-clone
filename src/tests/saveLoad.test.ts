@@ -200,11 +200,9 @@ describe('Save/Load System', () => {
 
     const restoredOffice = game2.offices[0];
 
-    expect(restoredOffice.numDemand).toBe(BUILDING_CONFIG.office.red.numDemand);
-    expect(restoredOffice.numIssues).toBe(BUILDING_CONFIG.office.red.numDemand);
-    expect(restoredOffice.demandTimers.length).toBe(
-      BUILDING_CONFIG.office.red.numDemand
-    );
+    expect(restoredOffice.numDemand).toBe(office.numDemand);
+    expect(restoredOffice.numIssues).toBe(office.numDemand);
+    expect(restoredOffice.demandTimers.length).toBe(office.numDemand);
   });
 
   it('handles multi-tile buildings in snapshot', () => {

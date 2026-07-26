@@ -1,12 +1,7 @@
 import * as LJS from 'littlejsengine';
 import type { Entity } from './Entity';
 import { COLOR_RESOURCES } from '@core/colors';
-import {
-  BUILDING_CONFIG,
-  COLOR_CONFIG,
-  DEMAND_CONFIG,
-  PATH_CONFIG
-} from '@core/config';
+import { BUILDING_CONFIG, COLOR_CONFIG, PATH_CONFIG } from '@core/config';
 
 export type DestinationType = 'red' | 'blue' | 'yellow';
 export type StructureRole = 'house' | 'office';
@@ -16,6 +11,7 @@ export interface BuildingEntrance {
 }
 
 const BUILDING_CORNER_RADIUS = 0.12;
+const HOUSE_RENDER_SIZE = 0.9;
 
 export class Building extends LJS.EngineObject implements Entity {
   readonly id: string;
@@ -112,7 +108,6 @@ export class Building extends LJS.EngineObject implements Entity {
     } else {
       this.renderOffice();
     }
-    this.renderDemandPins();
   }
 
   private static _cachedHousePoints: LJS.Vector2[] = [];
@@ -126,7 +121,7 @@ export class Building extends LJS.EngineObject implements Entity {
     const destColor = this.getDestinationColor();
 
     if (Building._cachedHousePoints.length === 0) {
-      const halfSize = 0.5;
+      const halfSize = HOUSE_RENDER_SIZE / 2;
       const radius = BUILDING_CORNER_RADIUS;
       const segments = 6;
       const corners = [
@@ -214,9 +209,16 @@ export class Building extends LJS.EngineObject implements Entity {
       this.pos
     );
 
-    for (const spot of this.parkingSpots) {
+    for (let index = 0; index < this.parkingSpots.length; index++) {
+      const spot = this.parkingSpots[index];
       Building._cachedParkingSpot.set(spot.x, spot.y);
-      LJS.drawCircle(Building._cachedParkingSpot, 0.18, COLOR_RESOURCES.grid);
+      LJS.drawCircle(
+        Building._cachedParkingSpot,
+        0.18,
+        this.isParkingSpotActive(index)
+          ? COLOR_RESOURCES.black
+          : COLOR_RESOURCES.grid
+      );
     }
 
     for (const pair of this.entrances) {
@@ -232,47 +234,55 @@ export class Building extends LJS.EngineObject implements Entity {
   }
 
   private createParkingSpots(): Array<{ x: number; y: number }> {
-    const maxSpots = BUILDING_CONFIG.office[this.destination].maxDemand;
-    const columns = 3;
-    const rows = 3;
-    const margin = 0.28;
-    const left = this.x - 0.5 + margin;
-    const right = this.x + this.width - 0.5 - margin;
-    const top = this.y - 0.5 + margin;
-    const bottom = this.y + this.height - 0.5 - margin;
-    const spots: Array<{ x: number; y: number }> = [];
+    const pathTiles = new Set<string>();
+    const addPathTile = (tile: { x: number; y: number }) => {
+      if (
+        tile.x >= this.x &&
+        tile.x < this.x + this.width &&
+        tile.y >= this.y &&
+        tile.y < this.y + this.height
+      ) {
+        pathTiles.add(`${tile.x},${tile.y}`);
+      }
+    };
 
-    for (let i = 0; i < Math.min(maxSpots, columns * rows); i++) {
-      const column = i % columns;
-      const row = Math.floor(i / columns);
-      spots.push({
-        x: left + (column / (columns - 1)) * (right - left),
-        y: top + (row / (rows - 1)) * (bottom - top)
-      });
+    for (const entrance of this.entrances) {
+      addPathTile(entrance.entryTile);
+    }
+
+    const start = this.entrances[0]?.entryTile;
+    const end = this.entrances[1]?.entryTile;
+    if (start && end) {
+      const current = { ...start };
+      while (current.x !== end.x) {
+        current.x += Math.sign(end.x - current.x);
+        addPathTile(current);
+      }
+      while (current.y !== end.y) {
+        current.y += Math.sign(end.y - current.y);
+        addPathTile(current);
+      }
+    }
+
+    const spots: Array<{ x: number; y: number }> = [];
+    for (let y = this.y; y < this.y + this.height; y++) {
+      for (let x = this.x; x < this.x + this.width; x++) {
+        if (!pathTiles.has(`${x},${y}`)) {
+          spots.push({ x, y });
+        }
+      }
     }
 
     return spots;
   }
 
-  private renderDemandPins() {
-    if (this.numIssues <= 0) return;
-
-    const color = COLOR_RESOURCES.black; // Demand pins are dark in MM
-    const pinSize = DEMAND_CONFIG.pinSize;
-    const spacing = DEMAND_CONFIG.pinSpacing;
-    const pinsPerRow = Math.floor((this.width - 0.3) / spacing);
-
-    for (let i = 0; i < this.numIssues; i++) {
-      const row = Math.floor(i / pinsPerRow);
-      const col = i % pinsPerRow;
-
-      const offsetX =
-        (col - (Math.min(this.numIssues, pinsPerRow) - 1) / 2) * spacing;
-      const offsetY =
-        (row - Math.floor((this.numIssues - 1) / pinsPerRow) / 2) * spacing;
-
-      LJS.drawCircle(this.pos.add(LJS.vec2(offsetX, offsetY)), pinSize, color);
-    }
+  public isParkingSpotActive(index: number): boolean {
+    return (
+      index >= 0 &&
+      index < this.parkingSpots.length &&
+      index < this.demandTimers.length &&
+      this.demandTimers[index] === 0
+    );
   }
 
   private getDestinationColor() {

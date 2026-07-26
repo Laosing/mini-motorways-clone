@@ -33,6 +33,7 @@ const TYPES: DestinationType[] = ['red', 'blue', 'yellow'];
 interface SpawnPositionOptions {
   width?: number;
   height?: number;
+  candidateRole?: StructureRole;
   anchor?: { x: number; y: number; width: number; height: number };
   minDistance?: number;
   maxDistance?: number;
@@ -57,6 +58,29 @@ export function hasOneTileBuildingClearance(
       x - 1 > buildingRight ||
       bottom + 1 < building.y ||
       y - 1 > buildingBottom
+    );
+  });
+}
+
+export function hasHouseSpawnClearance(
+  buildings: readonly Building[],
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): boolean {
+  const right = x + width - 1;
+  const bottom = y + height - 1;
+
+  return buildings.every((building) => {
+    const buildingRight = building.x + building.width - 1;
+    const buildingBottom = building.y + building.height - 1;
+    const gap = building.role === 'office' ? 1 : 0;
+    return (
+      right + gap < building.x ||
+      x - gap > buildingRight ||
+      bottom + gap < building.y ||
+      y - gap > buildingBottom
     );
   });
 }
@@ -318,7 +342,10 @@ export class Game {
     if (role === 'office') {
       const cfg = this.officeConfig(type);
       building.needyness = cfg.needyness;
-      building.numDemand = cfg.numDemand;
+      building.numDemand = Math.min(
+        cfg.numDemand,
+        building.parkingSpots.length
+      );
       this.ensureOfficeDemand(building);
     }
     return building;
@@ -462,7 +489,13 @@ export class Game {
         b.entrances
       );
       building.assignedWorkerIds = [...(b.assignedWorkerIds ?? [])];
-      building.demandTimers = b.demandTimers;
+      if (building.role === 'office') {
+        building.numDemand = Math.min(
+          b.numDemand,
+          building.parkingSpots.length
+        );
+      }
+      building.demandTimers = b.demandTimers.slice(0, building.numDemand);
       building.active = b.active ?? true;
       building.demand = b.demand ?? 0;
       building.numIssues = b.numIssues ?? 0;
@@ -549,16 +582,24 @@ export class Game {
     }
   }
 
-  consumeOfficeIssue(office: Building): boolean {
+  consumeOfficeIssue(office: Building, parkingSpotIndex?: number): boolean {
     this.ensureOfficeDemand(office);
-    for (let i = 0; i < office.demandTimers.length; i++) {
-      if (office.demandTimers[i] === 0) {
-        office.demandTimers[i] = this.nextOfficeDemandTimerSeconds(office);
-        office.numIssues = office.demandTimers.filter((t) => t === 0).length;
-        office.demand = office.numIssues * office.needyness;
-        return true;
-      }
+    const issueIndex =
+      parkingSpotIndex !== undefined &&
+      parkingSpotIndex >= 0 &&
+      parkingSpotIndex < office.demandTimers.length &&
+      office.demandTimers[parkingSpotIndex] === 0
+        ? parkingSpotIndex
+        : office.demandTimers.findIndex((timer) => timer === 0);
+
+    if (issueIndex >= 0) {
+      office.demandTimers[issueIndex] =
+        this.nextOfficeDemandTimerSeconds(office);
+      office.numIssues = office.demandTimers.filter((t) => t === 0).length;
+      office.demand = office.numIssues * office.needyness;
+      return true;
     }
+
     office.numIssues = 0;
     office.demand = 0;
     return false;
@@ -694,6 +735,7 @@ export class Game {
     const pos = this.getRandomPosition({
       width: officeProps.width,
       height: officeProps.height,
+      candidateRole: 'office',
       anchor: {
         x: anchor.x,
         y: anchor.y,
@@ -750,6 +792,7 @@ export class Game {
       cfg.numDemand,
       officeEntrances
     );
+    office.numDemand = Math.min(cfg.numDemand, office.parkingSpots.length);
     this.ensureOfficeDemand(office);
     this.buildings.push(office);
     this.setStructureOccupancy(office, office.id);
@@ -851,8 +894,12 @@ export class Game {
 
   private tryUpgradeOffice(office: Building): boolean {
     const cfg = BUILDING_CONFIG.office[office.destination];
-    if (office.numDemand >= cfg.maxDemand) return false;
-    office.numDemand += cfg.upgradeIncrement;
+    const maxDemand = Math.min(cfg.maxDemand, office.parkingSpots.length);
+    if (office.numDemand >= maxDemand) return false;
+    office.numDemand = Math.min(
+      maxDemand,
+      office.numDemand + cfg.upgradeIncrement
+    );
     this.ensureOfficeDemand(office);
     return true;
   }
@@ -861,13 +908,16 @@ export class Game {
     const office = this.pickOfficeForFirstHouse();
     if (!office) return false;
 
-    const pos = this.getRandomPosition({
-      anchor: { x: office.x, y: office.y, width: 1, height: 1 },
-      minDistance: 3,
-      maxDistance:
-        2 + this.offices.length * SPAWNING_CONFIG.houseMaxDistanceFactor,
-      maxNumAttempts: 40
-    });
+    const pos =
+      this.getHouseNeighborhoodPosition(office.destination) ??
+      this.getRandomPosition({
+        candidateRole: 'house',
+        anchor: { x: office.x, y: office.y, width: 1, height: 1 },
+        minDistance: 3,
+        maxDistance:
+          2 + this.offices.length * SPAWNING_CONFIG.houseMaxDistanceFactor,
+        maxNumAttempts: 40
+      });
     if (!pos) return false;
 
     this.spawnHouseAt(pos.x, pos.y, office.destination);
@@ -882,19 +932,59 @@ export class Game {
       : null;
     if (!friendHouse) return false;
 
-    const pos = this.getRandomPosition({
-      anchor: { x: friendHouse.x, y: friendHouse.y, width: 1, height: 1 },
-      minDistance: SPAWNING_CONFIG.houseMinDistance,
-      maxDistance: Math.max(
-        2,
-        this.offices.length * SPAWNING_CONFIG.houseMaxDistanceFactor
-      ),
-      maxNumAttempts: 40
-    });
+    const pos =
+      this.getHouseNeighborhoodPosition(type) ??
+      this.getRandomPosition({
+        candidateRole: 'house',
+        anchor: { x: friendHouse.x, y: friendHouse.y, width: 1, height: 1 },
+        minDistance: SPAWNING_CONFIG.houseMinDistance,
+        maxDistance: Math.max(
+          2,
+          this.offices.length * SPAWNING_CONFIG.houseMaxDistanceFactor
+        ),
+        maxNumAttempts: 40
+      });
     if (!pos) return false;
 
     this.spawnHouseAt(pos.x, pos.y, type);
     return true;
+  }
+
+  private getHouseNeighborhoodPosition(
+    destination: DestinationType
+  ): { x: number; y: number } | null {
+    const sameColorHouses = this.houses.filter(
+      (house) => house.destination === destination
+    );
+    if (!sameColorHouses.length) return null;
+
+    const center = sameColorHouses.reduce(
+      (sum, house) => ({ x: sum.x + house.x, y: sum.y + house.y }),
+      { x: 0, y: 0 }
+    );
+    center.x /= sameColorHouses.length;
+    center.y /= sameColorHouses.length;
+
+    const neighborhoodAnchor = sameColorHouses.reduce((closest, house) => {
+      const closestDistance =
+        (closest.x - center.x) ** 2 + (closest.y - center.y) ** 2;
+      const houseDistance =
+        (house.x - center.x) ** 2 + (house.y - center.y) ** 2;
+      return houseDistance < closestDistance ? house : closest;
+    });
+
+    return this.getRandomPosition({
+      candidateRole: 'house',
+      anchor: {
+        x: neighborhoodAnchor.x,
+        y: neighborhoodAnchor.y,
+        width: 1,
+        height: 1
+      },
+      minDistance: SPAWNING_CONFIG.houseMinDistance,
+      maxDistance: SPAWNING_CONFIG.houseNeighborhoodRadius,
+      maxNumAttempts: 40
+    });
   }
 
   public spawnHouseAt(
@@ -902,7 +992,7 @@ export class Game {
     y: number,
     destination: DestinationType
   ): void {
-    if (!hasOneTileBuildingClearance(this.buildings, x, y, 1, 1)) return;
+    if (!hasHouseSpawnClearance(this.buildings, x, y, 1, 1)) return;
 
     // Pick random orthogonal entrance for 1x1 house
     const neighbors = [
@@ -915,10 +1005,8 @@ export class Game {
       (n) =>
         this.grid.isInside(n.x, n.y) && !this.grid.get(n.x, n.y)?.occupantId
     );
-    const entrance =
-      validEntrances.length > 0
-        ? validEntrances[this.rng.int(0, validEntrances.length)]
-        : { x: x, y: y + 1 };
+    if (!validEntrances.length) return;
+    const entrance = validEntrances[this.rng.int(0, validEntrances.length)];
 
     const house = new Building(
       LJS.vec2(x, y),
@@ -1084,7 +1172,11 @@ export class Game {
         if (blocked) break;
       }
       if (blocked) continue;
-      if (!hasOneTileBuildingClearance(this.buildings, x, y, width, height)) {
+      const hasBuildingClearance =
+        options.candidateRole === 'house'
+          ? hasHouseSpawnClearance(this.buildings, x, y, width, height)
+          : hasOneTileBuildingClearance(this.buildings, x, y, width, height);
+      if (!hasBuildingClearance) {
         continue;
       }
 
@@ -1134,6 +1226,10 @@ export class Game {
     width: number;
     height: number;
   } {
+    if (this.rng.next() < BUILDING_CONFIG.megaOffice.spawnChance) {
+      return { ...BUILDING_CONFIG.megaOffice.size };
+    }
+
     const shouldRotate = this.rng.next() > 0.5;
     let dimensions = { width: 0, height: 0 };
     switch (destination) {
@@ -1196,6 +1292,7 @@ export class Game {
     if (office.role !== 'office') return;
 
     if (!office.demandTimers) office.demandTimers = [];
+    office.numDemand = Math.min(office.numDemand, office.parkingSpots.length);
 
     while (office.demandTimers.length < office.numDemand) {
       office.demandTimers.push(this.nextOfficeDemandTimerSeconds(office));

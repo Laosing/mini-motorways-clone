@@ -10,10 +10,12 @@ describe('Office Demand System', () => {
 
     const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
 
-    expect(office.numDemand).toBe(BUILDING_CONFIG.office.red.numDemand);
-    expect(office.demandTimers.length).toBe(
-      BUILDING_CONFIG.office.red.numDemand
+    const expectedCapacity = Math.min(
+      BUILDING_CONFIG.office.red.numDemand,
+      office.parkingSpots.length
     );
+    expect(office.numDemand).toBe(expectedCapacity);
+    expect(office.demandTimers.length).toBe(expectedCapacity);
   });
 
   it('decrements active demand timers', () => {
@@ -91,6 +93,22 @@ describe('Office Demand System', () => {
     expect(office.numIssues).toBe(0);
   });
 
+  it('consumes the issue belonging to a specific parking spot', () => {
+    const game = new Game(1);
+    game.init();
+    game.startPlay();
+
+    const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
+    office.demandTimers = [0, 0, 5];
+    office.numDemand = 3;
+    office.numIssues = 2;
+
+    expect(game.consumeOfficeIssue(office, 1)).toBe(true);
+    expect(office.demandTimers[0]).toBe(0);
+    expect(office.demandTimers[1]).toBeGreaterThan(0);
+    expect(office.numIssues).toBe(1);
+  });
+
   it('resets demand timer on consumption based on office type', () => {
     const game = new Game(1);
     game.init();
@@ -162,7 +180,7 @@ describe('Office Demand System', () => {
 
     game.updateOfficeDemand(0);
 
-    expect(redOffice.numIssues).toBe(BUILDING_CONFIG.office.red.numDemand);
+    expect(redOffice.numIssues).toBe(redOffice.numDemand);
     expect(blueOffice.numIssues).toBe(0);
     expect(yellowOffice.numIssues).toBe(5);
   });
@@ -174,14 +192,13 @@ describe('Office Demand System', () => {
 
     const office = game.addTestBuilding(5, 5, 'office', 'red', 3, 2);
 
-    expect(office.numDemand).toBe(BUILDING_CONFIG.office.red.numDemand);
-    expect(office.demandTimers.length).toBe(
-      BUILDING_CONFIG.office.red.numDemand
-    );
+    expect(office.numDemand).toBe(office.parkingSpots.length);
+    expect(office.demandTimers.length).toBe(office.parkingSpots.length);
 
     office.numDemand = 5;
     game.updateOfficeDemand(0);
 
-    expect(office.demandTimers.length).toBe(5);
+    expect(office.numDemand).toBe(office.parkingSpots.length);
+    expect(office.demandTimers.length).toBe(office.parkingSpots.length);
   });
 });

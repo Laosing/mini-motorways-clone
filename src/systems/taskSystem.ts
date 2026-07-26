@@ -16,7 +16,8 @@ import { WORKER_CONFIG } from '@core/config';
 const PX_TO_CELL = 1 / 8;
 const CLOSE_ENOUGH = 2 * PX_TO_CELL;
 const CLOSE_ENOUGH_DEST = 0.05;
-const MAX_SPEED = 0.35 * PX_TO_CELL;
+const MAX_SPEED = 1 * PX_TO_CELL;
+const STRAIGHT_SPEED_MULTIPLIER = 3;
 const MIN_CRUISE_SPEED = 0.04 * PX_TO_CELL;
 const ARRIVAL_RADIUS = 2.5 * PX_TO_CELL;
 const LOOKAHEAD_DISTANCE = 5.0 * PX_TO_CELL;
@@ -51,6 +52,28 @@ const _v1 = LJS.vec2();
 const _v2 = LJS.vec2();
 const _v3 = LJS.vec2();
 const _v4 = LJS.vec2();
+
+function getRouteTopSpeed(worker: Worker): number {
+  const current = worker.path[0];
+  const next = worker.path[1];
+  const previous = worker.lastReachedPos;
+  if (!previous || !current || !next) return MAX_SPEED;
+
+  const incomingX = current.x - previous.x;
+  const incomingY = current.y - previous.y;
+  const outgoingX = next.x - current.x;
+  const outgoingY = next.y - current.y;
+  const incomingLength = Math.hypot(incomingX, incomingY);
+  const outgoingLength = Math.hypot(outgoingX, outgoingY);
+  if (incomingLength < 0.001 || outgoingLength < 0.001) return MAX_SPEED;
+
+  const directionDot =
+    (incomingX * outgoingX + incomingY * outgoingY) /
+    (incomingLength * outgoingLength);
+  return directionDot > 0.98
+    ? MAX_SPEED * STRAIGHT_SPEED_MULTIPLIER
+    : MAX_SPEED;
+}
 
 function getLookaheadTarget(
   position: LJS.Vector2,
@@ -156,7 +179,7 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
   const rampCfg: SteeringConfig = {
     ...STEER_CFG,
     minCruiseSpeed: isFinalNode ? 0 : MIN_CRUISE_SPEED,
-    maxSpeed: MAX_SPEED * Math.min(1, dist / ARRIVAL_RADIUS)
+    maxSpeed: getRouteTopSpeed(worker) * Math.min(1, dist / ARRIVAL_RADIUS)
   };
   steerToward(worker, _v4, rampCfg);
 }
@@ -253,7 +276,8 @@ function applyWorkerCrowdAvoidance(game: Game, worker: Worker): void {
   const adaptiveCfg = {
     ...CROWD_CFG,
     slowdownStrength: CROWD_CFG.slowdownStrength * avoidanceMult,
-    turniness: CROWD_CFG.turniness * avoidanceMult
+    turniness: CROWD_CFG.turniness * avoidanceMult,
+    maxSpeed: getRouteTopSpeed(worker)
   };
 
   getNearbyWorkers(game, worker.x, worker.y, AVOID_DISTANCE, _nearbyBuffer);
@@ -347,7 +371,9 @@ function assignPeopleToOfficeIssues(game: Game): void {
 
         while (matched.length > 0 && needed > 0) {
           const parkingSpotIndex = office.parkingSpots.findIndex(
-            (_spot, index) => !reservedParkingSpots.has(index)
+            (_spot, index) =>
+              office.isParkingSpotActive(index) &&
+              !reservedParkingSpots.has(index)
           );
           if (parkingSpotIndex < 0) break;
 
@@ -575,7 +601,10 @@ export function updateWorkers(game: Game, dt: number): void {
           if (office) {
             worker.dx = 0;
             worker.dy = 0;
-            game.consumeOfficeIssue(office);
+            game.consumeOfficeIssue(
+              office,
+              worker.parkingSpotIndex ?? undefined
+            );
             game.servedTrips += 1;
             worker.task = 'atOffice';
             worker.lastReachedPos = null;

@@ -74,6 +74,11 @@ export class Worker extends LJS.EngineObject implements Entity {
     super.update();
   }
 
+  // Position and velocity are integrated by taskSystem's fixed-step movement.
+  // LittleJS calls this separately each rendered frame, so its default physics
+  // would otherwise apply worker velocity a second time.
+  updatePhysics() {}
+
   private static _cachedBodySize = LJS.vec2();
   private static _cachedOffset = LJS.vec2();
   private static _cachedPos = LJS.vec2();

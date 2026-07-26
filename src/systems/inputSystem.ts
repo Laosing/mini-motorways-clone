@@ -1,5 +1,6 @@
 import * as LJS from 'littlejsengine';
 import type { Game } from '@core/Game';
+import { PATH_CONFIG } from '@core/config';
 import { areAdjacent, edgeKey, createRoundaboutEdges } from './pathNetwork';
 import {
   isValidRoundaboutPlacement,
@@ -14,6 +15,46 @@ function mouseToTile(game: Game): { x: number; y: number } | null {
   return { x: wx, y: wy };
 }
 
+export function diagonalEdgeIntersectsOffice(
+  game: Game,
+  from: { x: number; y: number },
+  to: { x: number; y: number }
+): boolean {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (dx === 0 || dy === 0) return false;
+
+  const roadRadius = PATH_CONFIG.renderWidth / 2;
+  return game.offices.some((office) => {
+    const minX = office.x - 0.5 - roadRadius;
+    const maxX = office.x + office.width - 0.5 + roadRadius;
+    const minY = office.y - 0.5 - roadRadius;
+    const maxY = office.y + office.height - 0.5 + roadRadius;
+    let tMin = 0;
+    let tMax = 1;
+
+    const intersectsAxis = (
+      start: number,
+      delta: number,
+      min: number,
+      max: number
+    ): boolean => {
+      if (Math.abs(delta) < 0.0001) return start >= min && start <= max;
+      let near = (min - start) / delta;
+      let far = (max - start) / delta;
+      if (near > far) [near, far] = [far, near];
+      tMin = Math.max(tMin, near);
+      tMax = Math.min(tMax, far);
+      return tMin <= tMax;
+    };
+
+    return (
+      intersectsAxis(from.x, dx, minX, maxX) &&
+      intersectsAxis(from.y, dy, minY, maxY)
+    );
+  });
+}
+
 export function tryAddEdge(
   game: Game,
   from: { x: number; y: number },
@@ -21,6 +62,7 @@ export function tryAddEdge(
 ): boolean {
   if (!game.grid.isInside(to.x, to.y)) return false;
   if (!areAdjacent(from, to)) return false;
+  if (diagonalEdgeIntersectsOffice(game, from, to)) return false;
 
   const key = edgeKey(from, to);
   if (game.paths.some((p) => edgeKey(p.a, p.b) === key)) return true;
@@ -210,7 +252,10 @@ export function handleInput(game: Game): void {
         LJS.mousePos
       );
 
-      if (potentialNode) {
+      if (
+        potentialNode &&
+        !diagonalEdgeIntersectsOffice(game, game.dragStartTile, potentialNode)
+      ) {
         game.pathPreview = [{ a: game.dragStartTile, b: potentialNode }];
 
         // Pivot logic: if we are dragging FROM a house and NOT yet past the threshold,
