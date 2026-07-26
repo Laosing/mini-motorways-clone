@@ -11,7 +11,7 @@ import {
 } from './motion';
 import { findPathOnNetwork } from './pathNetwork';
 import { toKey } from '@utils/grid';
-import { WORKER_CONFIG } from '@core/config';
+import { PATH_CONFIG, WORKER_CONFIG } from '@core/config';
 
 const PX_TO_CELL = 1 / 8;
 const CLOSE_ENOUGH = 2 * PX_TO_CELL;
@@ -23,10 +23,13 @@ const ARRIVAL_RADIUS = 2.5 * PX_TO_CELL;
 const LOOKAHEAD_DISTANCE = 5.0 * PX_TO_CELL;
 const STEER_ACCEL = 0.04 * PX_TO_CELL; // Increased from 0.015 for better responsiveness
 const LANE_OFFSET = 1.2 * PX_TO_CELL;
+const WORKER_VISUAL_RADIUS = 1.2 * PX_TO_CELL;
 const MOVE_DAMPING = 0.95;
 const IDLE_DAMPING = 0.85;
 const WORKER_RADIUS = 1.35 * PX_TO_CELL;
 const WORKER_DIAMETER = WORKER_RADIUS * 2;
+const OFF_PATH_TIMEOUT = 5;
+const ON_PATH_DISTANCE = PATH_CONFIG.renderWidth / 2 + 0.02;
 const SLOW_DISTANCE = 6.0 * PX_TO_CELL;
 const AVOID_DISTANCE = WORKER_DIAMETER + 1.2 * PX_TO_CELL;
 const COLLISION_DISTANCE = WORKER_DIAMETER;
@@ -188,6 +191,10 @@ function steerAlongRoute(_game: Game, worker: Worker): void {
 const spatialGrid: Worker[][][] = []; // [y][x][workers]
 const activeCells: Worker[][] = []; // Keep track of populated cells for faster clearing
 
+function toSpatialCell(position: number): number {
+  return Math.floor(position + 0.5);
+}
+
 function updateSpatialGrid(game: Game) {
   const width = Math.ceil(game.grid.width);
   const height = Math.ceil(game.grid.height);
@@ -201,8 +208,8 @@ function updateSpatialGrid(game: Game) {
   // Populate grid
   for (let i = 0; i < game.workers.length; i++) {
     const v = game.workers[i];
-    const gx = Math.floor(v.x);
-    const gy = Math.floor(v.y);
+    const gx = toSpatialCell(v.x);
+    const gy = toSpatialCell(v.y);
     if (gx >= 0 && gx < width && gy >= 0 && gy < height) {
       if (!spatialGrid[gy]) spatialGrid[gy] = [];
       if (!spatialGrid[gy][gx]) spatialGrid[gy][gx] = [];
@@ -224,10 +231,10 @@ function getNearbyWorkers(
   const height = Math.ceil(game.grid.height);
   const width = Math.ceil(game.grid.width);
 
-  const minX = Math.max(0, Math.floor(x - radius));
-  const maxX = Math.min(width - 1, Math.floor(x + radius));
-  const minY = Math.max(0, Math.floor(y - radius));
-  const maxY = Math.min(height - 1, Math.floor(y + radius));
+  const minX = Math.max(0, toSpatialCell(x - radius));
+  const maxX = Math.min(width - 1, toSpatialCell(x + radius));
+  const minY = Math.max(0, toSpatialCell(y - radius));
+  const maxY = Math.min(height - 1, toSpatialCell(y + radius));
 
   for (let gy = minY; gy <= maxY; gy++) {
     if (!spatialGrid[gy]) continue;
@@ -436,10 +443,71 @@ function releaseParkingSpot(worker: Worker): void {
   worker.officeEntry = null;
 }
 
-function sanitizeWorkerPosition(game: Game, worker: Worker): void {
-  const maxX = game.grid.width - 1;
-  const maxY = game.grid.height - 1;
+function distanceToPathSegmentSquared(
+  x: number,
+  y: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number }
+): number {
+  const segmentX = b.x - a.x;
+  const segmentY = b.y - a.y;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  if (lengthSquared < 0.0001) {
+    return (x - a.x) ** 2 + (y - a.y) ** 2;
+  }
 
+  const projection = Math.max(
+    0,
+    Math.min(1, ((x - a.x) * segmentX + (y - a.y) * segmentY) / lengthSquared)
+  );
+  const closestX = a.x + segmentX * projection;
+  const closestY = a.y + segmentY * projection;
+  return (x - closestX) ** 2 + (y - closestY) ** 2;
+}
+
+function isWorkerOnPath(game: Game, worker: Worker): boolean {
+  const maxDistanceSquared = ON_PATH_DISTANCE * ON_PATH_DISTANCE;
+  return game.paths.some(
+    (path) =>
+      distanceToPathSegmentSquared(worker.x, worker.y, path.a, path.b) <=
+      maxDistanceSquared
+  );
+}
+
+function recoverWorkerOffPath(game: Game, worker: Worker, dt: number): boolean {
+  if (worker.task === 'atOffice' || isWorkerOnPath(game, worker)) {
+    worker.offPathTimer = 0;
+    return false;
+  }
+
+  worker.offPathTimer += Math.max(0, dt);
+  if (worker.offPathTimer < OFF_PATH_TIMEOUT) return false;
+  worker.offPathTimer = 0;
+
+  const home = game.houses.find(
+    (candidate) => candidate.id === worker.homeHouseId
+  );
+  if (!home) return false;
+
+  unassignFromOffice(game, worker.id, worker.assignedOfficeId);
+  worker.x = home.x;
+  worker.y = home.y;
+  worker.dx = 0;
+  worker.dy = 0;
+  worker.task = 'idle';
+  worker.target = null;
+  worker.path = [];
+  worker.assignedOfficeId = null;
+  worker.originalRouteLength = 0;
+  worker.lastReachedPos = null;
+  worker.stuckTimer = 0;
+  worker.lastPosForStuck = null;
+  worker.waitTimer = WORKER_CONFIG.waitTimer;
+  releaseParkingSpot(worker);
+  return true;
+}
+
+function sanitizeWorkerPosition(game: Game, worker: Worker): void {
   if (!Number.isFinite(worker.x) || !Number.isFinite(worker.y)) {
     const home = game.houses.find((y) => y.id === worker.homeHouseId);
     worker.x = home?.x ?? 0;
@@ -455,8 +523,11 @@ function sanitizeWorkerPosition(game: Game, worker: Worker): void {
     return;
   }
 
-  worker.x = Math.min(maxX, Math.max(0, worker.x));
-  worker.y = Math.min(maxY, Math.max(0, worker.y));
+  const minPosition = -0.5 + WORKER_VISUAL_RADIUS;
+  const maxX = game.grid.width - 0.5 - WORKER_VISUAL_RADIUS;
+  const maxY = game.grid.height - 0.5 - WORKER_VISUAL_RADIUS;
+  worker.x = Math.min(maxX, Math.max(minPosition, worker.x));
+  worker.y = Math.min(maxY, Math.max(minPosition, worker.y));
 }
 
 function resolveWorkerOverlaps(game: Game): void {
@@ -552,6 +623,7 @@ export function updateWorkers(game: Game, dt: number): void {
 
     advanceBody(worker, dt);
     sanitizeWorkerPosition(game, worker);
+    if (recoverWorkerOffPath(game, worker, dt)) continue;
 
     // Stuck detection logic
     if (worker.task === 'toOffice' || worker.task === 'toHome') {

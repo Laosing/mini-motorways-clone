@@ -23,6 +23,7 @@ export class Worker extends LJS.EngineObject implements Entity {
   lastReachedPos: { x: number; y: number } | null = null;
   stuckTimer: number = 0;
   lastPosForStuck: { x: number; y: number } | null = null;
+  offPathTimer: number = 0;
 
   constructor(
     pos: LJS.Vector2,
