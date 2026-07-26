@@ -28,11 +28,6 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 3;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  align-items: flex-end;
-  padding: 24px;
 }
 
 #ui * {
@@ -40,24 +35,93 @@ body {
 }
 
 .hud-panel {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  color: #333333;
-  padding: 16px 20px;
-  border-radius: 12px;
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  overflow-x: auto;
+  padding: 9px 16px;
+  color: #272721;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(51, 51, 45, 0.09);
+  border-radius: 10px;
+  box-shadow: 0 3px 14px rgba(51, 51, 45, 0.1);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.hud-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.hud-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hud-stat strong {
   font-size: 13px;
-  font-weight: 500;
-  line-height: 1.5;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  min-width: 220px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-label {
+  color: #74746a;
+  font-weight: 600;
+}
+
+.hud-divider {
+  width: 1px;
+  height: 16px;
+  flex: 0 0 1px;
+  background: rgba(51, 51, 45, 0.12);
+}
+
+.hud-destination {
+  gap: 5px;
+}
+
+.hud-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.hud-red {
+  color: #d94d4d;
+}
+
+.hud-blue {
+  color: #3c89db;
+}
+
+.hud-yellow {
+  color: #c89d00;
+}
+
+.hud-destination .hud-label {
+  color: inherit;
 }
 
 .button-group {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  max-width: calc(100vw - 48px);
 }
 
 .game-btn {
@@ -99,4 +163,19 @@ body {
 .game-btn.warning {
   background: #ffd93d;
   color: #333333;
+}
+
+@media (max-width: 720px) {
+  .hud-panel {
+    top: 8px;
+    max-width: calc(100vw - 16px);
+    gap: 13px;
+    padding-inline: 12px;
+  }
+
+  .button-group {
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100vw - 24px);
+  }
 }

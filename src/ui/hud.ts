@@ -139,19 +139,16 @@ export function updateHUD(game: Game): void {
   if (!hudEl) return;
 
   hudEl.innerHTML = `
-    <div style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #111;">Game Stats</div>
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
-      <span>Day: <strong>${game.day}</strong></span>
-      <span>Trips: <strong>${game.servedTrips}</strong></span>
-      <span>Houses: <strong>${game.houses.length}</strong></span>
-      <span>People: <strong>${game.workers.length}</strong></span>
-      <span style="grid-column: 1 / -1;">Grid: <strong>${game.grid.width} × ${game.grid.height}</strong></span>
-    </div>
-    <div style="margin-top: 10px; padding-top: 4px; border-top: 1px solid rgba(0,0,0,0.05);">
-      <span style="color: #F15B5B;">Red: ${game.redCount}</span> |
-      <span style="color: #4DA1FF;">Blue: ${game.blueCount}</span> |
-      <span style="color: #FFD93D;">Yellow: ${game.yellowCount}</span>
-    </div>
+    <div class="hud-stat"><span class="hud-label">Day</span><strong>${game.day}</strong></div>
+    <div class="hud-divider" aria-hidden="true"></div>
+    <div class="hud-stat"><span class="hud-label">Trips</span><strong>${game.servedTrips}</strong></div>
+    <div class="hud-stat"><span class="hud-label">Houses</span><strong>${game.houses.length}</strong></div>
+    <div class="hud-stat"><span class="hud-label">People</span><strong>${game.workers.length}</strong></div>
+    <div class="hud-stat"><span class="hud-label">Grid</span><strong>${game.grid.width} × ${game.grid.height}</strong></div>
+    <div class="hud-divider" aria-hidden="true"></div>
+    <div class="hud-stat hud-destination hud-red"><span class="hud-dot" aria-hidden="true"></span><span class="hud-label">Red</span><strong>${game.redCount}</strong></div>
+    <div class="hud-stat hud-destination hud-blue"><span class="hud-dot" aria-hidden="true"></span><span class="hud-label">Blue</span><strong>${game.blueCount}</strong></div>
+    <div class="hud-stat hud-destination hud-yellow"><span class="hud-dot" aria-hidden="true"></span><span class="hud-label">Yellow</span><strong>${game.yellowCount}</strong></div>
   `;
 
   const pauseBtn = document.getElementById('btn-pause');

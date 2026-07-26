@@ -39,4 +39,28 @@ describe('HUD grid controls', () => {
     expect(fileInput?.accept).toContain('.json');
     expect(fileInput?.hidden).toBe(true);
   });
+
+  it('renders all game stats in one compact header bar', () => {
+    document.body.innerHTML = '<div id="ui"></div>';
+    const game = new Game(3);
+    setupHUD(game);
+
+    const hud = document.querySelector('.hud-panel');
+    const labels = Array.from(hud?.querySelectorAll('.hud-label') ?? []).map(
+      (label) => label.textContent
+    );
+
+    expect(document.querySelectorAll('.hud-panel')).toHaveLength(1);
+    expect(labels).toEqual([
+      'Day',
+      'Trips',
+      'Houses',
+      'People',
+      'Grid',
+      'Red',
+      'Blue',
+      'Yellow'
+    ]);
+    expect(hud?.textContent).not.toContain('Game Stats');
+  });
 });
